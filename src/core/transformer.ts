@@ -1,6 +1,5 @@
 import * as recast from "recast";
-import traverseModule from "@babel/traverse";
-import * as t from "@babel/types";
+import { visit, builders as b } from "ast-types";
 import path from "path";
 import { readFileSafe } from "../utils/fs";
 import { logger } from "../utils/logger";
@@ -8,41 +7,31 @@ import type { ExtractedString } from "./scanner";
 import type { LocaleFile } from "./scaffolder";
 
 /**
- * Why recast instead of @babel/generator?
+ * Why recast + ast-types instead of @babel/traverse?
  *
- * @babel/generator reprints the ENTIRE file from the AST.
- * This means every line appears as changed in git — even lines
- * that were not touched — making diffs unreadable and reverting painful.
+ * recast.parse() returns a recast-wrapped AST. Passing this to
+ * @babel/traverse causes crashes because Babel's scope analysis
+ * expects a raw Babel AST, not a recast-wrapped one.
  *
- * recast is a print-preserving code generator. It tracks which AST
- * nodes were actually modified and only reprints those nodes.
- * Every unchanged node is printed character-for-character from the
- * original source.
+ * The correct pairing is:
+ *   recast.parse()  →  ast-types visit()  →  recast.print()
  *
- * Result: git diff shows only the actual string replacements.
- * The user can revert with `git checkout .` or `git reset --hard HEAD`
- * as long as they committed before running `rai replace`.
+ * ast-types is recast's companion library (it's a dependency of recast,
+ * already installed). It provides the visit() function which traverses
+ * recast ASTs correctly.
+ *
+ * recast.print() then only reprints nodes that were actually modified,
+ * producing minimal git diffs.
  */
-
-/**
- * Babel traverse has a quirky module shape in CJS environments.
- * The actual function is sometimes on .default, sometimes not.
- * This handles both cases.
- */
-const traverse = (traverseModule as any).default ?? traverseModule;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface TransformResult {
-  /** Absolute path to the file */
   filePath: string;
-  /** Whether any replacements were made */
   modified: boolean;
-  /** Total number of string replacements made */
   replacements: number;
-  /** The new source code — only set when modified is true */
   newCode?: string;
 }
 
@@ -50,52 +39,70 @@ export interface TransformResult {
 // AST node builders
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Builds: t('some.key') */
-function buildTCall(key: string): t.CallExpression {
-  return t.callExpression(t.identifier("t"), [t.stringLiteral(key)]);
+/**
+ * Builds: t('some.key')
+ */
+function buildTCall(key: string): any {
+  return b.callExpression(b.identifier("t"), [b.literal(key)]);
 }
 
-/** Builds: t('some.key', { param1, param2 }) */
-function buildTCallWithParams(key: string, params: string[]): t.CallExpression {
+/**
+ * Builds: t('some.key', { param1, param2 })
+ *
+ * Shorthand properties ({ firstName } instead of { firstName: firstName })
+ * must be set via the `shorthand` property on the node AFTER creation —
+ * b.property() does not accept a shorthand argument.
+ */
+function buildTCallWithParams(key: string, params: string[]): any {
   const props = params.map((param) => {
-    const id = t.identifier(param);
-    const prop = t.objectProperty(id, id);
+    const prop = b.property("init", b.identifier(param), b.identifier(param));
+    // Shorthand must be set after construction, not passed as an argument
     prop.shorthand = true;
     return prop;
   });
-  return t.callExpression(t.identifier("t"), [
-    t.stringLiteral(key),
-    t.objectExpression(props),
+
+  return b.callExpression(b.identifier("t"), [
+    b.literal(key),
+    b.objectExpression(props),
   ]);
 }
 
-/** Builds: {t('some.key')} as a JSXExpressionContainer */
-function buildJSXExpression(call: t.CallExpression): t.JSXExpressionContainer {
-  return t.jsxExpressionContainer(call);
+/**
+ * Builds: {t('some.key')} as a JSXExpressionContainer
+ */
+function buildJSXExpression(call: any): any {
+  return b.jsxExpressionContainer(call);
 }
 
-/** Builds: import { useTranslation } from 'react-i18next' */
-function buildUseTranslationImport(): t.ImportDeclaration {
-  return t.importDeclaration(
+/**
+ * Builds: import { useTranslation } from 'react-i18next'
+ */
+function buildUseTranslationImport(): any {
+  return b.importDeclaration(
     [
-      t.importSpecifier(
-        t.identifier("useTranslation"),
-        t.identifier("useTranslation"),
+      b.importSpecifier(
+        b.identifier("useTranslation"),
+        b.identifier("useTranslation"),
       ),
     ],
-    t.stringLiteral("react-i18next"),
+    b.literal("react-i18next"),
   );
 }
 
-/** Builds: const { t } = useTranslation() */
-function buildUseTranslationCall(): t.VariableDeclaration {
-  const prop = t.objectProperty(t.identifier("t"), t.identifier("t"));
-  prop.shorthand = true;
-
-  return t.variableDeclaration("const", [
-    t.variableDeclarator(
-      t.objectPattern([prop]),
-      t.callExpression(t.identifier("useTranslation"), []),
+/**
+ * Builds: const { t } = useTranslation()
+ */
+function buildUseTranslationCall(): any {
+  return b.variableDeclaration("const", [
+    b.variableDeclarator(
+      b.objectPattern([
+        b.objectProperty.from({
+          key: b.identifier("t"),
+          value: b.identifier("t"),
+          shorthand: true,
+        }),
+      ]),
+      b.callExpression(b.identifier("useTranslation"), []),
     ),
   ]);
 }
@@ -104,17 +111,13 @@ function buildUseTranslationCall(): t.VariableDeclaration {
 // Lookup helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Finds an extracted string by matching file path, original text, and
- * optionally source type.
- */
 function findExtracted(
   value: string,
   filePath: string,
-  strings: ExtractedString[],
+  fileStrings: ExtractedString[],
   sourceType?: ExtractedString["sourceType"],
 ): ExtractedString | undefined {
-  return strings.find(
+  return fileStrings.find(
     (s) =>
       s.filePath === filePath &&
       s.originalText === value.trim() &&
@@ -123,30 +126,32 @@ function findExtracted(
 }
 
 /**
- * Reconstructs the template literal display text (with {{param}} placeholders)
- * using the same algorithm as the scanner, then looks it up.
- *
- * Must match processTemplateLiteral() in scanner.ts exactly.
+ * Reconstructs the template literal display text with {{param}} placeholders
+ * (must match processTemplateLiteral in scanner.ts exactly)
+ * then looks it up in the extracted strings.
  */
 function findExtractedTemplate(
-  node: t.TemplateLiteral,
+  node: any,
   filePath: string,
-  strings: ExtractedString[],
+  fileStrings: ExtractedString[],
 ): ExtractedString | undefined {
   let text = "";
   let argIndex = 0;
 
-  node.quasis.forEach((quasi, i) => {
+  node.quasis.forEach((quasi: any, i: number) => {
     text += quasi.value.cooked ?? quasi.value.raw;
 
     if (i < node.expressions.length) {
       const expr = node.expressions[i];
       let paramName: string;
 
-      if (t.isIdentifier(expr)) {
+      if (expr.type === "Identifier") {
         paramName = expr.name;
-      } else if (t.isMemberExpression(expr) && t.isIdentifier(expr.property)) {
-        paramName = (expr.property as t.Identifier).name;
+      } else if (
+        expr.type === "MemberExpression" &&
+        expr.property.type === "Identifier"
+      ) {
+        paramName = expr.property.name;
       } else {
         paramName = `arg${argIndex++}`;
       }
@@ -155,50 +160,44 @@ function findExtractedTemplate(
     }
   });
 
-  return strings.find(
+  return fileStrings.find(
     (s) => s.filePath === filePath && s.originalText === text.trim(),
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Import injection
+// Import helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Returns true if useTranslation is already imported from react-i18next.
- */
-function hasUseTranslationImport(body: t.Statement[]): boolean {
-  return body.some(
+function hasUseTranslationImport(programBody: any[]): boolean {
+  return programBody.some(
     (node) =>
-      t.isImportDeclaration(node) &&
+      node.type === "ImportDeclaration" &&
       node.source.value === "react-i18next" &&
-      node.specifiers.some(
-        (spec) =>
-          t.isImportSpecifier(spec) &&
-          t.isIdentifier(spec.imported) &&
-          spec.imported.name === "useTranslation",
+      node.specifiers?.some(
+        (spec: any) =>
+          spec.type === "ImportSpecifier" &&
+          spec.imported?.name === "useTranslation",
       ),
   );
 }
 
-/**
- * Inserts the useTranslation import after the last existing import.
- * Only called once per file, after traversal completes.
- */
-function addUseTranslationImport(body: t.Statement[]): void {
-  if (hasUseTranslationImport(body)) return;
+function addUseTranslationImport(programBody: any[]): void {
+  if (hasUseTranslationImport(programBody)) return;
 
   let lastImportIndex = -1;
-  for (let i = 0; i < body.length; i++) {
-    if (t.isImportDeclaration(body[i])) lastImportIndex = i;
+  for (let i = 0; i < programBody.length; i++) {
+    if (programBody[i].type === "ImportDeclaration") {
+      lastImportIndex = i;
+    }
   }
 
   const importNode = buildUseTranslationImport();
 
   if (lastImportIndex >= 0) {
-    body.splice(lastImportIndex + 1, 0, importNode);
+    programBody.splice(lastImportIndex + 1, 0, importNode);
   } else {
-    body.unshift(importNode);
+    programBody.unshift(importNode);
   }
 }
 
@@ -206,79 +205,55 @@ function addUseTranslationImport(body: t.Statement[]): void {
 // Hook injection
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Returns true if `const { t } = useTranslation()` already exists
- * in the given list of statements.
- */
-function hasTDeclaration(statements: t.Statement[]): boolean {
+function hasTDeclaration(statements: any[]): boolean {
   return statements.some((stmt) => {
-    if (!t.isVariableDeclaration(stmt)) return false;
+    if (stmt.type !== "VariableDeclaration") return false;
 
-    return stmt.declarations.some((decl) => {
-      if (!t.isObjectPattern(decl.id)) return false;
-      if (!t.isCallExpression(decl.init)) return false;
-      if (!t.isIdentifier(decl.init.callee)) return false;
-      if ((decl.init.callee as t.Identifier).name !== "useTranslation") {
-        return false;
-      }
+    return stmt.declarations.some((decl: any) => {
+      if (decl.id?.type !== "ObjectPattern") return false;
+      if (decl.init?.type !== "CallExpression") return false;
+      if (decl.init?.callee?.name !== "useTranslation") return false;
 
-      return (decl.id as t.ObjectPattern).properties.some(
-        (prop) =>
-          t.isObjectProperty(prop) &&
-          t.isIdentifier(prop.key) &&
-          (prop.key as t.Identifier).name === "t",
+      return decl.id.properties?.some(
+        (prop: any) => prop.key?.name === "t" || prop.value?.name === "t",
       );
     });
   });
 }
 
-/**
- * Injects `const { t } = useTranslation()` as the first statement
- * in a block body if not already present.
- */
-function injectTDeclaration(block: t.BlockStatement): void {
-  if (hasTDeclaration(block.body)) return;
-  block.body.unshift(buildUseTranslationCall());
+function injectTDeclaration(blockBody: any[]): void {
+  if (hasTDeclaration(blockBody)) return;
+  blockBody.unshift(buildUseTranslationCall());
 }
 
 /**
- * Determines whether a function node is a React component.
+ * Checks if a function node looks like a React component.
  *
- * Rules:
- *   - Named with an uppercase first letter, OR
- *   - Is the direct default export (unnamed is fine)
- *
- * We also require a block body ({ }) — expression bodies like
- * () => <JSX /> cannot contain hook declarations.
+ * Criteria:
+ *   - Has a block body (not an expression like () => <JSX />)
+ *   - Name starts with uppercase, OR it is a default export
  */
-function isComponentFunction(
-  funcNode:
-    | t.FunctionDeclaration
-    | t.FunctionExpression
-    | t.ArrowFunctionExpression,
-  parent: t.Node | null | undefined,
-): boolean {
-  // Must have a block body to inject a hook into
-  if (!t.isBlockStatement(funcNode.body)) return false;
+function isComponentFunction(node: any, parent: any): boolean {
+  // Must have block body to inject hook into
+  if (node.body?.type !== "BlockStatement") return false;
 
-  // Named function declaration
-  if (t.isFunctionDeclaration(funcNode) && funcNode.id) {
-    return /^[A-Z]/.test(funcNode.id.name);
+  // Named function: function MyScreen() {}
+  if (node.type === "FunctionDeclaration" && node.id?.name) {
+    return /^[A-Z]/.test(node.id.name);
   }
 
-  // Arrow/function expression assigned to an uppercase variable:
-  // const MyScreen = () => { ... }
+  // Arrow/function expression assigned to uppercase variable:
+  // const MyScreen = () => {}
   if (
-    t.isVariableDeclarator(parent) &&
-    t.isIdentifier(parent.id) &&
-    /^[A-Z]/.test((parent.id as t.Identifier).name)
+    parent?.type === "VariableDeclarator" &&
+    parent.id?.type === "Identifier" &&
+    /^[A-Z]/.test(parent.id.name)
   ) {
     return true;
   }
 
-  // export default function() { ... }
-  // export default () => { ... }
-  if (t.isExportDefaultDeclaration(parent)) {
+  // export default function() {} or export default () => {}
+  if (parent?.type === "ExportDefaultDeclaration") {
     return true;
   }
 
@@ -290,31 +265,29 @@ function isComponentFunction(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Attempts to replace a string expression with a t() call.
- *
- * Returns [replacementNode, count].
- * When count is 0, the original node is returned unchanged.
+ * Replaces a string expression node with a t() call.
+ * Returns [newNode, replacementCount].
  *
  * Handles recursively:
- *   StringLiteral          → t('key')
- *   TemplateLiteral        → t('key', { params })
- *   ConditionalExpression  → recurse into branches
- *   LogicalExpression      → recurse into operands
+ *   StringLiteral         → t('key')
+ *   TemplateLiteral       → t('key', { params })
+ *   ConditionalExpression → recurse into branches
+ *   LogicalExpression     → recurse into operands
  */
 function replaceStringNode(
-  node: t.Expression,
+  node: any,
   filePath: string,
   fileStrings: ExtractedString[],
   sourceType: ExtractedString["sourceType"],
-): [t.Expression, number] {
-  // ── Plain string ───────────────────────────────────────────────────────────
-  if (t.isStringLiteral(node)) {
-    const extracted = findExtracted(
-      node.value,
-      filePath,
-      fileStrings,
-      sourceType,
-    );
+): [any, number] {
+  if (!node) return [node, 0];
+
+  // ── String literal ─────────────────────────────────────────────────────────
+  if (node.type === "StringLiteral" || node.type === "Literal") {
+    const value = node.value;
+    if (typeof value !== "string") return [node, 0];
+
+    const extracted = findExtracted(value, filePath, fileStrings, sourceType);
     if (!extracted) return [node, 0];
 
     const call =
@@ -326,7 +299,7 @@ function replaceStringNode(
   }
 
   // ── Template literal ───────────────────────────────────────────────────────
-  if (t.isTemplateLiteral(node)) {
+  if (node.type === "TemplateLiteral") {
     const extracted = findExtractedTemplate(node, filePath, fileStrings);
     if (!extracted) return [node, 0];
 
@@ -338,12 +311,12 @@ function replaceStringNode(
     return [call, 1];
   }
 
-  // ── Ternary: replace each branch individually ──────────────────────────────
-  if (t.isConditionalExpression(node)) {
+  // ── Ternary ────────────────────────────────────────────────────────────────
+  if (node.type === "ConditionalExpression") {
     let count = 0;
 
     const [newConsequent, c1] = replaceStringNode(
-      node.consequent as t.Expression,
+      node.consequent,
       filePath,
       fileStrings,
       sourceType,
@@ -354,7 +327,7 @@ function replaceStringNode(
     }
 
     const [newAlternate, c2] = replaceStringNode(
-      node.alternate as t.Expression,
+      node.alternate,
       filePath,
       fileStrings,
       sourceType,
@@ -367,8 +340,8 @@ function replaceStringNode(
     return [node, count];
   }
 
-  // ── Logical: replace string operands ──────────────────────────────────────
-  if (t.isLogicalExpression(node)) {
+  // ── Logical expression ─────────────────────────────────────────────────────
+  if (node.type === "LogicalExpression") {
     let count = 0;
 
     const [newLeft, c1] = replaceStringNode(
@@ -403,15 +376,6 @@ function replaceStringNode(
 // File transformer
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Transforms a single source file.
- *
- * Uses recast for parsing and printing so that only modified AST nodes
- * are reprinted. Unchanged code is preserved character-for-character,
- * producing minimal git diffs that are easy to review and revert.
- *
- * Does NOT write to disk — the replace command handles writing.
- */
 export function transformFile(
   filePath: string,
   appRoot: string,
@@ -421,14 +385,6 @@ export function transformFile(
   const code = readFileSafe(filePath);
   if (!code) return { filePath, modified: false, replacements: 0 };
 
-  /**
-   * Only work with strings that:
-   *   a) belong to this file
-   *   b) have a corresponding key in the locale file
-   *
-   * The locale file check ensures we never replace a string with a
-   * key that won't resolve at runtime.
-   */
   const fileStrings = strings.filter(
     (s) => s.filePath === filePath && localeData[s.fullKey] !== undefined,
   );
@@ -443,12 +399,6 @@ export function transformFile(
   try {
     ast = recast.parse(code, {
       parser: {
-        /**
-         * recast needs a parser object with a `parse` function.
-         * We wire in @babel/parser configured for TSX + TypeScript.
-         * The `tokens: true` option is required by recast to track
-         * original positions for print-preservation.
-         */
         parse(source: string) {
           const babelParser = require("@babel/parser");
           return babelParser.parse(source, {
@@ -477,21 +427,28 @@ export function transformFile(
   let totalReplacements = 0;
 
   /**
-   * Collect block statements of React components that need the hook.
-   *
-   * We collect during traversal and inject AFTER traversal ends.
-   * Reason: modifying a block body while traversing it can cause
-   * the injected node to be visited (and potentially broken) by
-   * subsequent visitor calls.
+   * Collect component block bodies to inject the hook into.
+   * We do this after traversal to avoid modifying the AST
+   * while it is being traversed.
    */
-  const componentBlocks = new Set<t.BlockStatement>();
+  const componentBlocks: any[] = [];
 
-  // ── Traverse and replace ─────────────────────────────────────────────────
-  traverse(ast.program, {
-    // ── Plain JSX text: <Text>Hello</Text> ───────────────────────────────────
-    JSXText(nodePath: any) {
+  // ── Visit with ast-types (recast's companion traversal API) ───────────────
+  /**
+   * ast-types visit() is the correct traversal API for recast ASTs.
+   *
+   * Rules for visit():
+   *   - Each visitor method is named `visit<NodeType>`
+   *   - Call `this.traverse(nodePath)` to continue traversal into children
+   *   - Call `return false` to stop traversal of this subtree
+   *   - To replace a node, mutate the parent's property directly
+   *     (nodePath.replace() also works but direct mutation is simpler here)
+   */
+  visit(ast, {
+    // ── JSX text: <Text>Hello</Text> ─────────────────────────────────────────
+    visitJSXText(nodePath) {
       const trimmed = (nodePath.node.value as string).trim();
-      if (!trimmed) return;
+      if (!trimmed) return this.traverse(nodePath);
 
       const extracted = findExtracted(
         trimmed,
@@ -499,33 +456,41 @@ export function transformFile(
         fileStrings,
         "jsx-text",
       );
-      if (!extracted) return;
 
-      const call = buildTCall(extracted.fullKey);
+      if (extracted) {
+        const call = buildTCall(extracted.fullKey);
+        nodePath.replace(buildJSXExpression(call));
+        totalReplacements++;
+        /**
+         * After replacing, do NOT traverse the new node —
+         * it's a t() call, not a string, so nothing to visit inside it.
+         */
+        return false;
+      }
 
-      /**
-       * JSXText cannot be directly replaced with a CallExpression —
-       * JSX children that are expressions must be wrapped in { }.
-       * nodePath.replaceWith handles updating the parent reference.
-       */
-      nodePath.replaceWith(buildJSXExpression(call));
-      totalReplacements++;
+      this.traverse(nodePath);
     },
 
-    // ── JSX expression container: <Text>{"Hello"}</Text> ────────────────────
-    JSXExpressionContainer(nodePath: any) {
+    // ── JSX expression: <Text>{"Hello"}</Text> ───────────────────────────────
+    visitJSXExpressionContainer(nodePath) {
+      const parent = nodePath.parent?.node;
+
       /**
+       * Only process containers that are JSX children.
        * Skip containers inside prop values like className={`flex`}.
-       * We only want containers that are direct JSX children.
        */
-      const parent = nodePath.parent;
-      if (!t.isJSXElement(parent) && !t.isJSXFragment(parent)) return;
+      const isChild =
+        parent?.type === "JSXElement" || parent?.type === "JSXFragment";
+
+      if (!isChild) return this.traverse(nodePath);
 
       const expr = nodePath.node.expression;
-      if (!expr || t.isJSXEmptyExpression(expr)) return;
+      if (!expr || expr.type === "JSXEmptyExpression") {
+        return this.traverse(nodePath);
+      }
 
       const [newExpr, count] = replaceStringNode(
-        expr as t.Expression,
+        expr,
         filePath,
         fileStrings,
         "jsx-expression",
@@ -535,176 +500,178 @@ export function transformFile(
         nodePath.node.expression = newExpr;
         totalReplacements += count;
       }
+
+      this.traverse(nodePath);
     },
 
-    // ── JSX string prop: <Comp title="Hello" /> ──────────────────────────────
-    JSXAttribute(nodePath: any) {
+    // ── JSX attribute: <Comp title="Hello" /> ────────────────────────────────
+    visitJSXAttribute(nodePath) {
       const { name, value } = nodePath.node;
-      if (!t.isJSXIdentifier(name)) return;
-      if (!t.isStringLiteral(value)) return;
 
-      const extracted = findExtracted(
-        value.value,
-        filePath,
-        fileStrings,
-        "jsx-attribute",
-      );
-      if (!extracted) return;
+      if (value?.type === "StringLiteral" || value?.type === "Literal") {
+        const strValue = value.value;
+        if (typeof strValue === "string") {
+          const extracted = findExtracted(
+            strValue,
+            filePath,
+            fileStrings,
+            "jsx-attribute",
+          );
 
-      /**
-       * Convert from string prop to expression prop:
-       *   title="Submit"  →  title={t('ns.submit')}
-       */
-      nodePath.node.value = buildJSXExpression(buildTCall(extracted.fullKey));
-      totalReplacements++;
-    },
-
-    // ── Call expressions: Alert.alert(), toast.show() etc. ───────────────────
-    CallExpression(nodePath: any) {
-      const { callee, arguments: args } = nodePath.node;
-
-      // Resolve callee to a string like "Alert.alert" or "toast.show"
-      let calleeName: string | null = null;
-
-      if (t.isIdentifier(callee)) {
-        calleeName = (callee as t.Identifier).name;
-      } else if (
-        t.isMemberExpression(callee) &&
-        t.isIdentifier(callee.object) &&
-        t.isIdentifier(callee.property)
-      ) {
-        calleeName =
-          `${(callee.object as t.Identifier).name}` +
-          `.${(callee.property as t.Identifier).name}`;
+          if (extracted) {
+            nodePath.node.value = buildJSXExpression(
+              buildTCall(extracted.fullKey),
+            );
+            totalReplacements++;
+          }
+        }
       }
 
-      if (!calleeName) return;
+      this.traverse(nodePath);
+    },
 
-      const isAlert = calleeName === "Alert.alert";
-      const isCustom = fileStrings.some((s) => s.sourceType === "call");
+    // ── Call expressions: Alert.alert(), toast.show() ────────────────────────
+    visitCallExpression(nodePath) {
+      const { callee, arguments: args } = nodePath.node;
 
-      if (!isAlert && !isCustom) return;
+      let calleeName: string | null = null;
 
-      const sourceType: ExtractedString["sourceType"] = isAlert
-        ? "alert"
-        : "call";
+      /**
+       * We must check the node's type string before accessing .name
+       * because ast-types types callee as ExpressionKind — a broad union
+       * that doesn't guarantee a .name property.
+       *
+       * Checking node.type === 'Identifier' first narrows it safely.
+       */
+      if (callee.type === "Identifier") {
+        calleeName = (callee as any).name;
+      } else if (
+        callee.type === "MemberExpression" &&
+        callee.object?.type === "Identifier" &&
+        callee.property?.type === "Identifier"
+      ) {
+        calleeName = `${(callee.object as any).name}.${(callee.property as any).name}`;
+      }
 
-      args.forEach((arg: any, index: number) => {
-        if (!t.isStringLiteral(arg)) return;
+      if (calleeName) {
+        const isAlert = calleeName === "Alert.alert";
+        const isCustom = fileStrings.some((s) => s.sourceType === "call");
 
-        const extracted = findExtracted(
-          arg.value,
-          filePath,
-          fileStrings,
-          sourceType,
-        );
-        if (!extracted) return;
+        if (isAlert || isCustom) {
+          const sourceType: ExtractedString["sourceType"] = isAlert
+            ? "alert"
+            : "call";
 
-        nodePath.node.arguments[index] = buildTCall(extracted.fullKey);
-        totalReplacements++;
-      });
+          args.forEach((arg: any, index: number) => {
+            const isStr =
+              arg.type === "StringLiteral" || arg.type === "Literal";
+            if (!isStr || typeof arg.value !== "string") return;
+
+            const extracted = findExtracted(
+              arg.value,
+              filePath,
+              fileStrings,
+              sourceType,
+            );
+            if (!extracted) return;
+
+            nodePath.node.arguments[index] = buildTCall(extracted.fullKey);
+            totalReplacements++;
+          });
+        }
+      }
+
+      this.traverse(nodePath);
     },
 
     // ── Throw: throw new Error('msg') ────────────────────────────────────────
-    ThrowStatement(nodePath: any) {
+    visitThrowStatement(nodePath) {
       const { argument } = nodePath.node;
 
       if (
-        !t.isNewExpression(argument) ||
-        !t.isIdentifier(argument.callee) ||
-        (argument.callee as t.Identifier).name !== "Error"
+        argument?.type === "NewExpression" &&
+        argument.callee?.type === "Identifier" && // ← narrow first
+        (argument.callee as any).name === "Error" // ← then access .name
       ) {
-        return;
+        argument.arguments.forEach((arg: any, index: number) => {
+          const isStr = arg.type === "StringLiteral" || arg.type === "Literal";
+          if (!isStr || typeof arg.value !== "string") return;
+
+          const extracted = findExtracted(
+            arg.value,
+            filePath,
+            fileStrings,
+            "throw",
+          );
+          if (!extracted) return;
+
+          argument.arguments[index] = buildTCall(extracted.fullKey);
+          totalReplacements++;
+        });
       }
 
-      argument.arguments.forEach((arg: any, index: number) => {
-        if (!t.isStringLiteral(arg)) return;
-
-        const extracted = findExtracted(
-          arg.value,
-          filePath,
-          fileStrings,
-          "throw",
-        );
-        if (!extracted) return;
-
-        argument.arguments[index] = buildTCall(extracted.fullKey);
-        totalReplacements++;
-
-        /**
-         * Note: we do NOT add this file to componentBlocks for throws.
-         *
-         * throw statements often appear in async functions, event handlers,
-         * or utility functions — not React components. Injecting
-         * useTranslation there would break the rules of hooks.
-         *
-         * If the file also has JSX replacements, componentBlocks will
-         * be populated by those and the hook will be available.
-         */
-      });
+      this.traverse(nodePath);
     },
 
-    // ── Collect React component bodies for hook injection ────────────────────
+    // ── Collect React component blocks for hook injection ────────────────────
     /**
-     * IMPORTANT: These must be THREE SEPARATE visitors.
+     * We collect block bodies here and inject the hook AFTER traversal.
+     * This avoids visiting the injected node during the same traversal.
      *
-     * The combined string syntax 'FunctionDeclaration|ArrowFunctionExpression'
-     * is NOT reliably supported by @babel/traverse in all versions.
-     * Using it causes the visitor to silently fail — no error, just nothing
-     * happens. This was the root cause of the hook not being injected.
+     * Each function type is handled in its own visitor — combining them
+     * into one does not work reliably with ast-types visit().
      */
-    FunctionDeclaration(nodePath: any) {
-      const node = nodePath.node as t.FunctionDeclaration;
-      if (!isComponentFunction(node, nodePath.parent)) return;
-      componentBlocks.add(node.body as t.BlockStatement);
+    visitFunctionDeclaration(nodePath) {
+      const node = nodePath.node;
+      const parent = nodePath.parent?.node;
+
+      if (isComponentFunction(node, parent)) {
+        componentBlocks.push(node.body);
+      }
+
+      this.traverse(nodePath);
     },
 
-    FunctionExpression(nodePath: any) {
-      const node = nodePath.node as t.FunctionExpression;
-      if (!isComponentFunction(node, nodePath.parent)) return;
-      componentBlocks.add(node.body as t.BlockStatement);
+    visitFunctionExpression(nodePath) {
+      const node = nodePath.node;
+      const parent = nodePath.parent?.node;
+
+      if (isComponentFunction(node, parent)) {
+        componentBlocks.push(node.body);
+      }
+
+      this.traverse(nodePath);
     },
 
-    ArrowFunctionExpression(nodePath: any) {
-      const node = nodePath.node as t.ArrowFunctionExpression;
-      if (!isComponentFunction(node, nodePath.parent)) return;
-      /**
-       * isComponentFunction already checks for BlockStatement body
-       * so this cast is safe.
-       */
-      componentBlocks.add(node.body as t.BlockStatement);
+    visitArrowFunctionExpression(nodePath) {
+      const node = nodePath.node;
+      const parent = nodePath.parent?.node;
+
+      if (isComponentFunction(node, parent)) {
+        componentBlocks.push(node.body);
+      }
+
+      this.traverse(nodePath);
     },
   });
 
-  // Nothing was replaced — return early, no need to reprint
   if (totalReplacements === 0) {
     return { filePath, modified: false, replacements: 0 };
   }
 
   // ── Inject const { t } = useTranslation() ────────────────────────────────
-  /**
-   * Done AFTER traversal completes to avoid the injected node
-   * being visited by the traversal.
-   */
   for (const block of componentBlocks) {
-    injectTDeclaration(block);
+    if (block?.type === "BlockStatement") {
+      injectTDeclaration(block.body);
+    }
   }
 
   // ── Inject import ─────────────────────────────────────────────────────────
-  /**
-   * Also done after traversal for the same reason.
-   * addUseTranslationImport only adds the import if not already present.
-   */
-  if (componentBlocks.size > 0) {
+  if (componentBlocks.length > 0) {
     addUseTranslationImport(ast.program.body);
   }
 
-  // ── Print with recast ─────────────────────────────────────────────────────
-  /**
-   * recast.print() only reprints AST nodes that were modified.
-   * All other nodes are printed from their original source positions.
-   * This produces minimal diffs — only the changed lines appear in git.
-   */
+  // ── Print — only changed nodes are reprinted ──────────────────────────────
   const newCode = recast.print(ast).code;
 
   return {
@@ -720,12 +687,8 @@ export function transformFile(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Transforms all files that have translatable strings.
- * Returns results without writing to disk.
- *
- * Each file is processed independently with its own AST parse/traverse/print
- * cycle. This ensures there is no shared state between files that could
- * cause one file's traversal to affect another.
+ * Transforms all files with translatable strings.
+ * Each file is processed independently — no shared state between files.
  */
 export async function transformProject(
   appRoot: string,
@@ -733,7 +696,6 @@ export async function transformProject(
   localeData: LocaleFile,
 ): Promise<TransformResult[]> {
   const uniqueFiles = [...new Set(strings.map((s) => s.filePath))];
-
   logger.dim(`  Processing ${uniqueFiles.length} file(s)...`);
 
   const results: TransformResult[] = [];
