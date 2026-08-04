@@ -187,17 +187,16 @@ export async function replace(options: ReplaceOptions): Promise<void> {
   logger.success(`Done — ${written} file(s) updated.`);
 
   // ── Step 8: Next steps ────────────────────────────────────────────────────
+  // ── Step 8: Next steps ────────────────────────────────────────────────────
   logger.section("Next steps");
   logger.info(`
   1. Run your app and verify everything works:
        npx expo start
-       (or your usual start command)
 
-  2. Check for any components where the hook injection may need
-     manual adjustment — particularly:
-       • Components that are not named with an uppercase letter
-       • HOCs or render prop patterns
-       • Async functions that use t() from a throw statement
+  2. If something looks wrong, revert using git:
+       ${chalk.cyan("git checkout .")}
+       This discards all uncommitted changes and restores your files.
+       This is why we asked you to commit before running replace.
 
   3. If everything looks good, commit:
        ${chalk.cyan("git add .")}
