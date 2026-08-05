@@ -52,4 +52,18 @@ program
     await replace(options);
   });
 
+// ─── revert ───────────────────────────────────────────────────────────────────
+program
+  .command("revert")
+  .description("Restore source files to their pre-replace state")
+  .option("-p, --path <path>", "Root path of the project", ".")
+  .option(
+    "--clean",
+    "Delete backup files without restoring (use after verifying replace output)",
+  )
+  .action(async (options) => {
+    const { revert } = await import("./commands/revert");
+    await revert(options);
+  });
+
 program.parse(process.argv);

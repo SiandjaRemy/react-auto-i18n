@@ -8,7 +8,7 @@ import { readLocaleFile, resolveLocaleFilePath } from "../core/scaffolder";
 import { transformProject } from "../core/transformer";
 import { writeFile, exists } from "../utils/fs";
 import { confirm } from "../utils/prompt";
-
+import { backupFile } from "../utils/backup";
 interface ReplaceOptions {
   path: string;
   dryRun?: boolean;
@@ -171,10 +171,20 @@ export async function replace(options: ReplaceOptions): Promise<void> {
     if (!result.newCode) continue;
 
     try {
+      /**
+       * Back up the original file before writing.
+       * This enables `rai revert` to restore the pre-replace state
+       * even if the user did not commit beforehand.
+       *
+       * If a backup already exists from a previous replace run,
+       * backupFile() skips it — preserving the original pre-i18n state.
+       */
+      backupFile(result.filePath);
       writeFile(result.filePath, result.newCode);
       written++;
       logger.success(
-        `${path.relative(appRoot, result.filePath)} — ${result.replacements} replacement(s)`,
+        `${path.relative(appRoot, result.filePath)}` +
+          ` — ${result.replacements} replacement(s)`,
       );
     } catch (err) {
       logger.error(
@@ -186,6 +196,7 @@ export async function replace(options: ReplaceOptions): Promise<void> {
   logger.newline();
   logger.success(`Done — ${written} file(s) updated.`);
 
+
   // ── Step 8: Next steps ────────────────────────────────────────────────────
   // ── Step 8: Next steps ────────────────────────────────────────────────────
   logger.section("Next steps");
@@ -193,12 +204,17 @@ export async function replace(options: ReplaceOptions): Promise<void> {
   1. Run your app and verify everything works:
        npx expo start
 
-  2. If something looks wrong, revert using git:
+  2. If something looks wrong, revert using git or the revert command:
        ${chalk.cyan("git checkout .")}
        This discards all uncommitted changes and restores your files.
        This is why we asked you to commit before running replace.
+       or
+       ${chalk.cyan('rai revert')}
+       This restores all files to their state before replace was run.
 
   3. If everything looks good, commit:
+       ${chalk.cyan('rai revert --clean')}
+       makes sure all backup files are deleted (they are not needed anymore)
        ${chalk.cyan("git add .")}
        ${chalk.cyan('git commit -m "feat: replace strings with i18n t() calls"')}
 

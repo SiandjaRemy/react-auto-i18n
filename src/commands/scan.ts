@@ -12,6 +12,7 @@ import {
   isPackageInstalled,
   buildInstallCommand,
 } from "../utils/prompt";
+import fs from "fs";
 
 interface ScanOptions {
   path: string;
@@ -216,24 +217,20 @@ function printPreviewTable(strings: ExtractedString[]): void {
 /**
  * Prints setup instructions for react-i18next after locale generation.
  *
- * The import path shown adapts based on localeFileName and localesDir
- * so the user can copy-paste without modification.
+ * The import path shown for the i18n file is computed relative to the
+ * most likely entry point location, not hardcoded. This prevents the
+ * common confusion where `import './src/i18n'` is wrong because the
+ * entry point is inside app/ or src/.
  *
- * We also detect missing dependencies and show the correct install
- * command for npm, yarn, or pnpm.
+ * Entry point detection priority:
+ *   1. app/_layout.tsx  (Expo Router)
+ *   2. src/app/_layout.tsx
+ *   3. App.tsx
+ *   4. src/App.tsx
  *
- * Import path logic:
- *   localesDir: 'locales', localeFileName: null
- *     → '../locales/en.json'  (assuming i18n.ts is in src/)
- *
- *   localesDir: 'src/locales', localeFileName: null
- *     → './locales/en.json'   (same directory level as src/i18n.ts)
- *
- *   localesDir: 'locales', localeFileName: 'translation'
- *     → '../locales/en/translation.json'
- *
- *   localesDir: 'src/locales', localeFileName: 'translation'
- *     → './locales/en/translation.json'
+ * The i18n file is assumed to live at src/i18n.ts relative to appRoot.
+ * The import path is then computed as the relative path from the entry
+ * point's directory to the i18n file.
  */
 function printNextSteps(
   appRoot: string,
@@ -243,31 +240,89 @@ function printNextSteps(
 ): void {
   logger.section("Next steps");
 
-  /**
-   * Compute the correct relative import path for the locale file
-   * as it would appear in src/i18n.ts.
-   *
-   * The convention is that i18n.ts lives in src/. So:
-   *   - If localesDir is 'locales' (at root), the import goes up one level: '../locales/...'
-   *   - If localesDir is 'src/locales', it's at the same level as src/i18n.ts: './locales/...'
-   *   - If localesDir is 'src/i18n/locales', same level: './i18n/locales/...'
-   *
-   * We detect whether localesDir starts with 'src/' to decide.
-   */
-  const isInsideSrc = localesDir.startsWith("src/");
-  const localesDirFromSrc = isInsideSrc
-    ? `./${localesDir.replace(/^src\//, "")}` // './locales'
-    : `../${localesDir}`; // '../locales'
-
-  const localeImportPath = localeFileName
-    ? `${localesDirFromSrc}/${defaultLang}/${localeFileName}.json`
-    : `${localesDirFromSrc}/${defaultLang}.json`;
-
+  // ── Resolve locale output path for display ────────────────────────────────
   const localeOutputPath = localeFileName
     ? `${localesDir}/${defaultLang}/${localeFileName}.json`
     : `${localesDir}/${defaultLang}.json`;
 
-  // Check which dependencies are missing
+  // ── Resolve correct locale import path for i18n.ts ────────────────────────
+  /**
+   * i18n.ts lives at src/i18n.ts (relative to appRoot).
+   * The locale file path relative to i18n.ts depends on localesDir.
+   *
+   * If localesDir is 'src/locales':
+   *   i18n.ts is at src/i18n.ts
+   *   locale is at src/locales/en/translation.json
+   *   → relative path from src/ to src/locales/ is ./locales/...
+   *
+   * If localesDir is 'locales':
+   *   i18n.ts is at src/i18n.ts
+   *   locale is at locales/en.json
+   *   → relative path from src/ to locales/ is ../locales/...
+   */
+  const i18nFileDir = path.join(appRoot, "src");
+  const localeAbsPath = localeFileName
+    ? path.join(appRoot, localesDir, defaultLang, `${localeFileName}.json`)
+    : path.join(appRoot, localesDir, `${defaultLang}.json`);
+
+  const localeImportPath = path
+    .relative(i18nFileDir, localeAbsPath)
+    .replace(/\\/g, "/")
+    .replace(/^([^.])/, "./$1"); // ensure it starts with ./
+
+  // ── Detect entry point and compute import path ────────────────────────────
+  /**
+   * We check common entry point locations in priority order.
+   * For each candidate, we compute the relative path from that file's
+   * directory to src/i18n.ts.
+   *
+   * This produces the correct import regardless of where the entry
+   * point lives relative to the project root.
+   */
+  const entryPointCandidates = [
+    "app/_layout.tsx",
+    "app/_layout.ts",
+    "src/app/_layout.tsx",
+    "src/app/_layout.ts",
+    "App.tsx",
+    "App.ts",
+    "src/App.tsx",
+    "src/App.ts",
+  ];
+
+  let entryPointFile = "your app entry point";
+  let i18nImportPath = "./src/i18n"; // safe fallback
+
+  const i18nAbsPath = path.join(appRoot, "src", "i18n.ts");
+
+  for (const candidate of entryPointCandidates) {
+    const candidateAbsPath = path.join(appRoot, candidate);
+
+    if (fs.existsSync(candidateAbsPath)) {
+      entryPointFile = candidate;
+
+      /**
+       * Compute the relative path from the entry point's directory
+       * to the i18n file.
+       *
+       * Example:
+       *   entry:   app/_layout.tsx   → dir: app/
+       *   i18n:    src/i18n.ts
+       *   relative from app/ to src/i18n.ts → ../src/i18n
+       */
+      const entryDir = path.dirname(candidateAbsPath);
+      const rel = path
+        .relative(entryDir, i18nAbsPath)
+        .replace(/\\/g, "/") // normalize Windows backslashes
+        .replace(/\.ts$/, "") // strip .ts extension
+        .replace(/^([^.])/, "./$1"); // ensure starts with ./ or ../
+
+      i18nImportPath = rel;
+      break;
+    }
+  }
+
+  // ── Dependency check ──────────────────────────────────────────────────────
   const missing = ["i18next", "react-i18next"].filter(
     (pkg) => !isPackageInstalled(pkg, appRoot),
   );
@@ -283,6 +338,7 @@ function printNextSteps(
        ${chalk.cyan(installCmd)}`);
   }
 
+  // ── Print guide ───────────────────────────────────────────────────────────
   logger.info(`
   ${stepNum++}. Create src/i18n.ts in your project:
 
@@ -303,8 +359,8 @@ ${chalk.cyan(`     import i18n from 'i18next'
 
      export default i18n`)}
 
-  ${stepNum++}. Import it in your app entry point (App.tsx or app/_layout.tsx):
-       ${chalk.cyan(`import './src/i18n'`)}
+  ${stepNum++}. Import it in your app entry point (${entryPointFile}):
+       ${chalk.cyan(`import '${i18nImportPath}'`)}
 
   ${stepNum++}. Review ${localeOutputPath}, then commit:
        ${chalk.cyan(`git add .\ngit commit -m "chore: add i18n locale file"`)}

@@ -1109,9 +1109,9 @@ async function generateLocaleFile(strings, lang, localesDir, localeFileName) {
 function readLocaleFile(lang, localesDir, localeFileName) {
   const filePath = resolveLocaleFilePath(localesDir, lang, localeFileName);
   try {
-    const fs6 = require("fs");
-    if (!fs6.existsSync(filePath)) return {};
-    return JSON.parse(fs6.readFileSync(filePath, "utf-8"));
+    const fs8 = require("fs");
+    if (!fs8.existsSync(filePath)) return {};
+    return JSON.parse(fs8.readFileSync(filePath, "utf-8"));
   } catch {
     logger.warn(`Could not read locale file: ${filePath}`);
     return {};
@@ -1299,10 +1299,33 @@ function printPreviewTable(strings) {
 }
 function printNextSteps(appRoot, localesDir, defaultLang, localeFileName) {
   logger.section("Next steps");
-  const isInsideSrc = localesDir.startsWith("src/");
-  const localesDirFromSrc = isInsideSrc ? `./${localesDir.replace(/^src\//, "")}` : `../${localesDir}`;
-  const localeImportPath = localeFileName ? `${localesDirFromSrc}/${defaultLang}/${localeFileName}.json` : `${localesDirFromSrc}/${defaultLang}.json`;
   const localeOutputPath = localeFileName ? `${localesDir}/${defaultLang}/${localeFileName}.json` : `${localesDir}/${defaultLang}.json`;
+  const i18nFileDir = import_path7.default.join(appRoot, "src");
+  const localeAbsPath = localeFileName ? import_path7.default.join(appRoot, localesDir, defaultLang, `${localeFileName}.json`) : import_path7.default.join(appRoot, localesDir, `${defaultLang}.json`);
+  const localeImportPath = import_path7.default.relative(i18nFileDir, localeAbsPath).replace(/\\/g, "/").replace(/^([^.])/, "./$1");
+  const entryPointCandidates = [
+    "app/_layout.tsx",
+    "app/_layout.ts",
+    "src/app/_layout.tsx",
+    "src/app/_layout.ts",
+    "App.tsx",
+    "App.ts",
+    "src/App.tsx",
+    "src/App.ts"
+  ];
+  let entryPointFile = "your app entry point";
+  let i18nImportPath = "./src/i18n";
+  const i18nAbsPath = import_path7.default.join(appRoot, "src", "i18n.ts");
+  for (const candidate of entryPointCandidates) {
+    const candidateAbsPath = import_path7.default.join(appRoot, candidate);
+    if (import_fs8.default.existsSync(candidateAbsPath)) {
+      entryPointFile = candidate;
+      const entryDir = import_path7.default.dirname(candidateAbsPath);
+      const rel = import_path7.default.relative(entryDir, i18nAbsPath).replace(/\\/g, "/").replace(/\.ts$/, "").replace(/^([^.])/, "./$1");
+      i18nImportPath = rel;
+      break;
+    }
+  }
   const missing = ["i18next", "react-i18next"].filter(
     (pkg) => !isPackageInstalled(pkg, appRoot)
   );
@@ -1335,8 +1358,8 @@ ${import_chalk2.default.cyan(`     import i18n from 'i18next'
 
      export default i18n`)}
 
-  ${stepNum++}. Import it in your app entry point (App.tsx or app/_layout.tsx):
-       ${import_chalk2.default.cyan(`import './src/i18n'`)}
+  ${stepNum++}. Import it in your app entry point (${entryPointFile}):
+       ${import_chalk2.default.cyan(`import '${i18nImportPath}'`)}
 
   ${stepNum++}. Review ${localeOutputPath}, then commit:
        ${import_chalk2.default.cyan(`git add .
@@ -1348,7 +1371,7 @@ git commit -m "chore: add i18n locale file"`)}
        This will rewrite your source files to use t() calls automatically.
   `);
 }
-var import_path7, import_chalk2, import_ora;
+var import_path7, import_chalk2, import_ora, import_fs8;
 var init_scan = __esm({
   "src/commands/scan.ts"() {
     "use strict";
@@ -1361,6 +1384,7 @@ var init_scan = __esm({
     init_scanner();
     init_scaffolder();
     init_prompt();
+    import_fs8 = __toESM(require("fs"));
   }
 });
 
@@ -1793,13 +1817,13 @@ function __disposeResources(env) {
   }
   return next();
 }
-function __rewriteRelativeImportExtension(path10, preserveJsx) {
-  if (typeof path10 === "string" && /^\.\.?\//.test(path10)) {
-    return path10.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m, tsx, d, ext, cm) {
+function __rewriteRelativeImportExtension(path12, preserveJsx) {
+  if (typeof path12 === "string" && /^\.\.?\//.test(path12)) {
+    return path12.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m, tsx, d, ext, cm) {
       return tsx ? preserveJsx ? ".jsx" : ".js" : d && (!ext || !cm) ? m : d + ext + "." + cm.toLowerCase() + "js";
     });
   }
-  return path10;
+  return path12;
 }
 var extendStatics, __assign, __createBinding, __setModuleDefault, ownKeys, _SuppressedError, tslib_es6_default;
 var init_tslib_es6 = __esm({
@@ -2704,16 +2728,16 @@ var require_path = __commonJS({
         this.__childCache = null;
       };
       var Pp = Path.prototype;
-      function getChildCache(path10) {
-        return path10.__childCache || (path10.__childCache = /* @__PURE__ */ Object.create(null));
+      function getChildCache(path12) {
+        return path12.__childCache || (path12.__childCache = /* @__PURE__ */ Object.create(null));
       }
-      function getChildPath(path10, name) {
-        var cache = getChildCache(path10);
-        var actualChildValue = path10.getValueProperty(name);
+      function getChildPath(path12, name) {
+        var cache = getChildCache(path12);
+        var actualChildValue = path12.getValueProperty(name);
         var childPath = cache[name];
         if (!hasOwn.call(cache, name) || // Ensure consistency between cache and reality.
         childPath.value !== actualChildValue) {
-          childPath = cache[name] = new path10.constructor(actualChildValue, path10, name);
+          childPath = cache[name] = new path12.constructor(actualChildValue, path12, name);
         }
         return childPath;
       }
@@ -2725,12 +2749,12 @@ var require_path = __commonJS({
         for (var _i = 0; _i < arguments.length; _i++) {
           names[_i] = arguments[_i];
         }
-        var path10 = this;
+        var path12 = this;
         var count = names.length;
         for (var i = 0; i < count; ++i) {
-          path10 = getChildPath(path10, names[i]);
+          path12 = getChildPath(path12, names[i]);
         }
-        return path10;
+        return path12;
       };
       Pp.each = function each(callback, context) {
         var childPaths = [];
@@ -2766,12 +2790,12 @@ var require_path = __commonJS({
       };
       function emptyMoves() {
       }
-      function getMoves(path10, offset, start, end) {
-        isArray.assert(path10.value);
+      function getMoves(path12, offset, start, end) {
+        isArray.assert(path12.value);
         if (offset === 0) {
           return emptyMoves;
         }
-        var length = path10.value.length;
+        var length = path12.value.length;
         if (length < 1) {
           return emptyMoves;
         }
@@ -2789,10 +2813,10 @@ var require_path = __commonJS({
         isNumber.assert(start);
         isNumber.assert(end);
         var moves = /* @__PURE__ */ Object.create(null);
-        var cache = getChildCache(path10);
+        var cache = getChildCache(path12);
         for (var i = start; i < end; ++i) {
-          if (hasOwn.call(path10.value, i)) {
-            var childPath = path10.get(i);
+          if (hasOwn.call(path12.value, i)) {
+            var childPath = path12.get(i);
             if (childPath.name !== i) {
               throw new Error("");
             }
@@ -2810,7 +2834,7 @@ var require_path = __commonJS({
               throw new Error("");
             }
             cache[newIndex2] = childPath2;
-            path10.value[newIndex2] = childPath2.value;
+            path12.value[newIndex2] = childPath2.value;
           }
         };
       }
@@ -2885,34 +2909,34 @@ var require_path = __commonJS({
         }
         return pp.insertAt.apply(pp, insertAtArgs);
       };
-      function repairRelationshipWithParent(path10) {
-        if (!(path10 instanceof Path)) {
+      function repairRelationshipWithParent(path12) {
+        if (!(path12 instanceof Path)) {
           throw new Error("");
         }
-        var pp = path10.parentPath;
+        var pp = path12.parentPath;
         if (!pp) {
-          return path10;
+          return path12;
         }
         var parentValue = pp.value;
         var parentCache = getChildCache(pp);
-        if (parentValue[path10.name] === path10.value) {
-          parentCache[path10.name] = path10;
+        if (parentValue[path12.name] === path12.value) {
+          parentCache[path12.name] = path12;
         } else if (isArray.check(parentValue)) {
-          var i = parentValue.indexOf(path10.value);
+          var i = parentValue.indexOf(path12.value);
           if (i >= 0) {
-            parentCache[path10.name = i] = path10;
+            parentCache[path12.name = i] = path12;
           }
         } else {
-          parentValue[path10.name] = path10.value;
-          parentCache[path10.name] = path10;
+          parentValue[path12.name] = path12.value;
+          parentCache[path12.name] = path12;
         }
-        if (parentValue[path10.name] !== path10.value) {
+        if (parentValue[path12.name] !== path12.value) {
           throw new Error("");
         }
-        if (path10.parentPath.get(path10.name) !== path10) {
+        if (path12.parentPath.get(path12.name) !== path12) {
           throw new Error("");
         }
-        return path10;
+        return path12;
       }
       Pp.replace = function replace2(replacement) {
         var results = [];
@@ -2996,12 +3020,12 @@ var require_scope = __commonJS({
       var Expression = namedTypes.Expression;
       var isArray = types.builtInTypes.array;
       var b2 = types.builders;
-      var Scope = function Scope2(path10, parentScope) {
+      var Scope = function Scope2(path12, parentScope) {
         if (!(this instanceof Scope2)) {
           throw new Error("Scope constructor cannot be invoked without 'new'");
         }
-        if (!TypeParameterScopeType.check(path10.value)) {
-          ScopeType.assert(path10.value);
+        if (!TypeParameterScopeType.check(path12.value)) {
+          ScopeType.assert(path12.value);
         }
         var depth;
         if (parentScope) {
@@ -3014,8 +3038,8 @@ var require_scope = __commonJS({
           depth = 0;
         }
         Object.defineProperties(this, {
-          path: { value: path10 },
-          node: { value: path10.value },
+          path: { value: path12 },
+          node: { value: path12.value },
           isGlobal: { value: !parentScope, enumerable: true },
           depth: { value: depth },
           parent: { value: parentScope },
@@ -3094,10 +3118,10 @@ var require_scope = __commonJS({
         this.scan();
         return this.types;
       };
-      function scanScope(path10, bindings, scopeTypes) {
-        var node = path10.value;
+      function scanScope(path12, bindings, scopeTypes) {
+        var node = path12.value;
         if (TypeParameterScopeType.check(node)) {
-          var params = path10.get("typeParameters", "params");
+          var params = path12.get("typeParameters", "params");
           if (isArray.check(params.value)) {
             params.each(function(childPath) {
               addTypeParameter(childPath, scopeTypes);
@@ -3106,45 +3130,45 @@ var require_scope = __commonJS({
         }
         if (ScopeType.check(node)) {
           if (namedTypes.CatchClause.check(node)) {
-            addPattern(path10.get("param"), bindings);
+            addPattern(path12.get("param"), bindings);
           } else {
-            recursiveScanScope(path10, bindings, scopeTypes);
+            recursiveScanScope(path12, bindings, scopeTypes);
           }
         }
       }
-      function recursiveScanScope(path10, bindings, scopeTypes) {
-        var node = path10.value;
-        if (path10.parent && namedTypes.FunctionExpression.check(path10.parent.node) && path10.parent.node.id) {
-          addPattern(path10.parent.get("id"), bindings);
+      function recursiveScanScope(path12, bindings, scopeTypes) {
+        var node = path12.value;
+        if (path12.parent && namedTypes.FunctionExpression.check(path12.parent.node) && path12.parent.node.id) {
+          addPattern(path12.parent.get("id"), bindings);
         }
         if (!node) {
         } else if (isArray.check(node)) {
-          path10.each(function(childPath) {
+          path12.each(function(childPath) {
             recursiveScanChild(childPath, bindings, scopeTypes);
           });
         } else if (namedTypes.Function.check(node)) {
-          path10.get("params").each(function(paramPath) {
+          path12.get("params").each(function(paramPath) {
             addPattern(paramPath, bindings);
           });
-          recursiveScanChild(path10.get("body"), bindings, scopeTypes);
-          recursiveScanScope(path10.get("typeParameters"), bindings, scopeTypes);
+          recursiveScanChild(path12.get("body"), bindings, scopeTypes);
+          recursiveScanScope(path12.get("typeParameters"), bindings, scopeTypes);
         } else if (namedTypes.TypeAlias && namedTypes.TypeAlias.check(node) || namedTypes.InterfaceDeclaration && namedTypes.InterfaceDeclaration.check(node) || namedTypes.TSTypeAliasDeclaration && namedTypes.TSTypeAliasDeclaration.check(node) || namedTypes.TSInterfaceDeclaration && namedTypes.TSInterfaceDeclaration.check(node)) {
-          addTypePattern(path10.get("id"), scopeTypes);
+          addTypePattern(path12.get("id"), scopeTypes);
         } else if (namedTypes.VariableDeclarator.check(node)) {
-          addPattern(path10.get("id"), bindings);
-          recursiveScanChild(path10.get("init"), bindings, scopeTypes);
+          addPattern(path12.get("id"), bindings);
+          recursiveScanChild(path12.get("init"), bindings, scopeTypes);
         } else if (node.type === "ImportSpecifier" || node.type === "ImportNamespaceSpecifier" || node.type === "ImportDefaultSpecifier") {
           addPattern(
             // Esprima used to use the .name field to refer to the local
             // binding identifier for ImportSpecifier nodes, but .id for
             // ImportNamespaceSpecifier and ImportDefaultSpecifier nodes.
             // ESTree/Acorn/ESpree use .local for all three node types.
-            path10.get(node.local ? "local" : node.name ? "name" : "id"),
+            path12.get(node.local ? "local" : node.name ? "name" : "id"),
             bindings
           );
         } else if (Node.check(node) && !Expression.check(node)) {
           types.eachField(node, function(name, child) {
-            var childPath = path10.get(name);
+            var childPath = path12.get(name);
             if (!pathHasValue(childPath, child)) {
               throw new Error("");
             }
@@ -3152,37 +3176,37 @@ var require_scope = __commonJS({
           });
         }
       }
-      function pathHasValue(path10, value) {
-        if (path10.value === value) {
+      function pathHasValue(path12, value) {
+        if (path12.value === value) {
           return true;
         }
-        if (Array.isArray(path10.value) && path10.value.length === 0 && Array.isArray(value) && value.length === 0) {
+        if (Array.isArray(path12.value) && path12.value.length === 0 && Array.isArray(value) && value.length === 0) {
           return true;
         }
         return false;
       }
-      function recursiveScanChild(path10, bindings, scopeTypes) {
-        var node = path10.value;
+      function recursiveScanChild(path12, bindings, scopeTypes) {
+        var node = path12.value;
         if (!node || Expression.check(node)) {
         } else if (namedTypes.FunctionDeclaration.check(node) && node.id !== null) {
-          addPattern(path10.get("id"), bindings);
+          addPattern(path12.get("id"), bindings);
         } else if (namedTypes.ClassDeclaration && namedTypes.ClassDeclaration.check(node) && node.id !== null) {
-          addPattern(path10.get("id"), bindings);
-          recursiveScanScope(path10.get("typeParameters"), bindings, scopeTypes);
+          addPattern(path12.get("id"), bindings);
+          recursiveScanScope(path12.get("typeParameters"), bindings, scopeTypes);
         } else if (namedTypes.InterfaceDeclaration && namedTypes.InterfaceDeclaration.check(node) || namedTypes.TSInterfaceDeclaration && namedTypes.TSInterfaceDeclaration.check(node)) {
-          addTypePattern(path10.get("id"), scopeTypes);
+          addTypePattern(path12.get("id"), scopeTypes);
         } else if (ScopeType.check(node)) {
           if (namedTypes.CatchClause.check(node) && // TODO Broaden this to accept any pattern.
           namedTypes.Identifier.check(node.param)) {
             var catchParamName = node.param.name;
             var hadBinding = hasOwn.call(bindings, catchParamName);
-            recursiveScanScope(path10.get("body"), bindings, scopeTypes);
+            recursiveScanScope(path12.get("body"), bindings, scopeTypes);
             if (!hadBinding) {
               delete bindings[catchParamName];
             }
           }
         } else {
-          recursiveScanScope(path10, bindings, scopeTypes);
+          recursiveScanScope(path12, bindings, scopeTypes);
         }
       }
       function addPattern(patternPath, bindings) {
@@ -3531,53 +3555,53 @@ var require_node_path = __commonJS({
       NPp.firstInStatement = function() {
         return firstInStatement(this);
       };
-      function firstInStatement(path10) {
-        for (var node, parent; path10.parent; path10 = path10.parent) {
-          node = path10.node;
-          parent = path10.parent.node;
-          if (n.BlockStatement.check(parent) && path10.parent.name === "body" && path10.name === 0) {
+      function firstInStatement(path12) {
+        for (var node, parent; path12.parent; path12 = path12.parent) {
+          node = path12.node;
+          parent = path12.parent.node;
+          if (n.BlockStatement.check(parent) && path12.parent.name === "body" && path12.name === 0) {
             if (parent.body[0] !== node) {
               throw new Error("Nodes must be equal");
             }
             return true;
           }
-          if (n.ExpressionStatement.check(parent) && path10.name === "expression") {
+          if (n.ExpressionStatement.check(parent) && path12.name === "expression") {
             if (parent.expression !== node) {
               throw new Error("Nodes must be equal");
             }
             return true;
           }
-          if (n.SequenceExpression.check(parent) && path10.parent.name === "expressions" && path10.name === 0) {
+          if (n.SequenceExpression.check(parent) && path12.parent.name === "expressions" && path12.name === 0) {
             if (parent.expressions[0] !== node) {
               throw new Error("Nodes must be equal");
             }
             continue;
           }
-          if (n.CallExpression.check(parent) && path10.name === "callee") {
+          if (n.CallExpression.check(parent) && path12.name === "callee") {
             if (parent.callee !== node) {
               throw new Error("Nodes must be equal");
             }
             continue;
           }
-          if (n.MemberExpression.check(parent) && path10.name === "object") {
+          if (n.MemberExpression.check(parent) && path12.name === "object") {
             if (parent.object !== node) {
               throw new Error("Nodes must be equal");
             }
             continue;
           }
-          if (n.ConditionalExpression.check(parent) && path10.name === "test") {
+          if (n.ConditionalExpression.check(parent) && path12.name === "test") {
             if (parent.test !== node) {
               throw new Error("Nodes must be equal");
             }
             continue;
           }
-          if (isBinary(parent) && path10.name === "left") {
+          if (isBinary(parent) && path12.name === "left") {
             if (parent.left !== node) {
               throw new Error("Nodes must be equal");
             }
             continue;
           }
-          if (n.UnaryExpression.check(parent) && !parent.prefix && path10.name === "argument") {
+          if (n.UnaryExpression.check(parent) && !parent.prefix && path12.name === "argument") {
             if (parent.argument !== node) {
               throw new Error("Nodes must be equal");
             }
@@ -3751,36 +3775,36 @@ var require_path_visitor = __commonJS({
       };
       PVp.reset = function(_path) {
       };
-      PVp.visitWithoutReset = function(path10) {
+      PVp.visitWithoutReset = function(path12) {
         if (this instanceof this.Context) {
-          return this.visitor.visitWithoutReset(path10);
+          return this.visitor.visitWithoutReset(path12);
         }
-        if (!(path10 instanceof NodePath)) {
+        if (!(path12 instanceof NodePath)) {
           throw new Error("");
         }
-        var value = path10.value;
+        var value = path12.value;
         var methodName = value && typeof value === "object" && typeof value.type === "string" && this._methodNameTable[value.type];
         if (methodName) {
-          var context = this.acquireContext(path10);
+          var context = this.acquireContext(path12);
           try {
             return context.invokeVisitorMethod(methodName);
           } finally {
             this.releaseContext(context);
           }
         } else {
-          return visitChildren(path10, this);
+          return visitChildren(path12, this);
         }
       };
-      function visitChildren(path10, visitor) {
-        if (!(path10 instanceof NodePath)) {
+      function visitChildren(path12, visitor) {
+        if (!(path12 instanceof NodePath)) {
           throw new Error("");
         }
         if (!(visitor instanceof PathVisitor)) {
           throw new Error("");
         }
-        var value = path10.value;
+        var value = path12.value;
         if (isArray.check(value)) {
-          path10.each(visitor.visitWithoutReset, visitor);
+          path12.each(visitor.visitWithoutReset, visitor);
         } else if (!isObject.check(value)) {
         } else {
           var childNames = types.getFieldNames(value);
@@ -3794,19 +3818,19 @@ var require_path_visitor = __commonJS({
             if (!hasOwn.call(value, childName)) {
               value[childName] = types.getFieldValue(value, childName);
             }
-            childPaths.push(path10.get(childName));
+            childPaths.push(path12.get(childName));
           }
           for (var i = 0; i < childCount; ++i) {
             visitor.visitWithoutReset(childPaths[i]);
           }
         }
-        return path10.value;
+        return path12.value;
       }
-      PVp.acquireContext = function(path10) {
+      PVp.acquireContext = function(path12) {
         if (this._reusableContextStack.length === 0) {
-          return new this.Context(path10);
+          return new this.Context(path12);
         }
-        return this._reusableContextStack.pop().reset(path10);
+        return this._reusableContextStack.pop().reset(path12);
       };
       PVp.releaseContext = function(context) {
         if (!(context instanceof this.Context)) {
@@ -3822,14 +3846,14 @@ var require_path_visitor = __commonJS({
         return this._changeReported;
       };
       function makeContextConstructor(visitor) {
-        function Context(path10) {
+        function Context(path12) {
           if (!(this instanceof Context)) {
             throw new Error("");
           }
           if (!(this instanceof PathVisitor)) {
             throw new Error("");
           }
-          if (!(path10 instanceof NodePath)) {
+          if (!(path12 instanceof NodePath)) {
             throw new Error("");
           }
           Object.defineProperty(this, "visitor", {
@@ -3838,7 +3862,7 @@ var require_path_visitor = __commonJS({
             enumerable: true,
             configurable: false
           });
-          this.currentPath = path10;
+          this.currentPath = path12;
           this.needToCallTraverse = true;
           Object.seal(this);
         }
@@ -3851,14 +3875,14 @@ var require_path_visitor = __commonJS({
         return Context;
       }
       var sharedContextProtoMethods = /* @__PURE__ */ Object.create(null);
-      sharedContextProtoMethods.reset = function reset(path10) {
+      sharedContextProtoMethods.reset = function reset(path12) {
         if (!(this instanceof this.Context)) {
           throw new Error("");
         }
-        if (!(path10 instanceof NodePath)) {
+        if (!(path12 instanceof NodePath)) {
           throw new Error("");
         }
-        this.currentPath = path10;
+        this.currentPath = path12;
         this.needToCallTraverse = true;
         return this;
       };
@@ -3881,34 +3905,34 @@ var require_path_visitor = __commonJS({
         if (this.needToCallTraverse !== false) {
           throw new Error("Must either call this.traverse or return false in " + methodName);
         }
-        var path10 = this.currentPath;
-        return path10 && path10.value;
+        var path12 = this.currentPath;
+        return path12 && path12.value;
       };
-      sharedContextProtoMethods.traverse = function traverse2(path10, newVisitor) {
+      sharedContextProtoMethods.traverse = function traverse2(path12, newVisitor) {
         if (!(this instanceof this.Context)) {
           throw new Error("");
         }
-        if (!(path10 instanceof NodePath)) {
+        if (!(path12 instanceof NodePath)) {
           throw new Error("");
         }
         if (!(this.currentPath instanceof NodePath)) {
           throw new Error("");
         }
         this.needToCallTraverse = false;
-        return visitChildren(path10, PathVisitor.fromMethodsObject(newVisitor || this.visitor));
+        return visitChildren(path12, PathVisitor.fromMethodsObject(newVisitor || this.visitor));
       };
-      sharedContextProtoMethods.visit = function visit2(path10, newVisitor) {
+      sharedContextProtoMethods.visit = function visit2(path12, newVisitor) {
         if (!(this instanceof this.Context)) {
           throw new Error("");
         }
-        if (!(path10 instanceof NodePath)) {
+        if (!(path12 instanceof NodePath)) {
           throw new Error("");
         }
         if (!(this.currentPath instanceof NodePath)) {
           throw new Error("");
         }
         this.needToCallTraverse = false;
-        return PathVisitor.fromMethodsObject(newVisitor || this.visitor).visitWithoutReset(path10);
+        return PathVisitor.fromMethodsObject(newVisitor || this.visitor).visitWithoutReset(path12);
       };
       sharedContextProtoMethods.reportChanged = function reportChanged() {
         this.visitor.reportChanged();
@@ -5387,6 +5411,19 @@ var require_main = __commonJS({
 });
 
 // src/core/transformer.ts
+function isNestedInsideComponent(nodePath) {
+  let current = nodePath.parent;
+  while (current) {
+    const node = current.node;
+    const parent = current.parent?.node;
+    const isFn = node?.type === "FunctionDeclaration" || node?.type === "FunctionExpression" || node?.type === "ArrowFunctionExpression";
+    if (isFn && isComponentFunction(node, parent)) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
 function buildTCall(key) {
   return import_ast_types.builders.callExpression(import_ast_types.builders.identifier("t"), [import_ast_types.builders.literal(key)]);
 }
@@ -5416,18 +5453,34 @@ function buildUseTranslationImport() {
   );
 }
 function buildUseTranslationCall() {
+  const prop = import_ast_types.builders.property("init", import_ast_types.builders.identifier("t"), import_ast_types.builders.identifier("t"));
+  prop.shorthand = true;
   return import_ast_types.builders.variableDeclaration("const", [
     import_ast_types.builders.variableDeclarator(
-      import_ast_types.builders.objectPattern([
-        import_ast_types.builders.objectProperty.from({
-          key: import_ast_types.builders.identifier("t"),
-          value: import_ast_types.builders.identifier("t"),
-          shorthand: true
-        })
-      ]),
+      import_ast_types.builders.objectPattern([prop]),
       import_ast_types.builders.callExpression(import_ast_types.builders.identifier("useTranslation"), [])
     )
   ]);
+}
+function buildTFunctionImport() {
+  return import_ast_types.builders.importDeclaration(
+    [import_ast_types.builders.importSpecifier(import_ast_types.builders.identifier("TFunction"), import_ast_types.builders.identifier("TFunction"))],
+    import_ast_types.builders.literal("i18next")
+  );
+}
+function buildTFunctionParam() {
+  const param = import_ast_types.builders.identifier("t");
+  param.typeAnnotation = {
+    type: "TSTypeAnnotation",
+    typeAnnotation: {
+      type: "TSTypeReference",
+      typeName: {
+        type: "Identifier",
+        name: "TFunction"
+      }
+    }
+  };
+  return param;
 }
 function findExtracted(value, filePath, fileStrings, sourceType) {
   return fileStrings.find(
@@ -5456,26 +5509,24 @@ function findExtractedTemplate(node, filePath, fileStrings) {
     (s) => s.filePath === filePath && s.originalText === text.trim()
   );
 }
-function hasUseTranslationImport(programBody) {
+function hasImport(programBody, source, name) {
   return programBody.some(
-    (node) => node.type === "ImportDeclaration" && node.source.value === "react-i18next" && node.specifiers?.some(
-      (spec) => spec.type === "ImportSpecifier" && spec.imported?.name === "useTranslation"
+    (node) => node.type === "ImportDeclaration" && node.source.value === source && node.specifiers?.some(
+      (spec) => spec.type === "ImportSpecifier" && spec.imported?.name === name
     )
   );
 }
-function addUseTranslationImport(programBody) {
-  if (hasUseTranslationImport(programBody)) return;
+function addImport(programBody, source, name, buildFn) {
+  if (hasImport(programBody, source, name)) return;
   let lastImportIndex = -1;
   for (let i = 0; i < programBody.length; i++) {
-    if (programBody[i].type === "ImportDeclaration") {
-      lastImportIndex = i;
-    }
+    if (programBody[i].type === "ImportDeclaration") lastImportIndex = i;
   }
-  const importNode = buildUseTranslationImport();
+  const node = buildFn();
   if (lastImportIndex >= 0) {
-    programBody.splice(lastImportIndex + 1, 0, importNode);
+    programBody.splice(lastImportIndex + 1, 0, node);
   } else {
-    programBody.unshift(importNode);
+    programBody.unshift(node);
   }
 }
 function hasTDeclaration(statements) {
@@ -5503,10 +5554,32 @@ function isComponentFunction(node, parent) {
   if (parent?.type === "VariableDeclarator" && parent.id?.type === "Identifier" && /^[A-Z]/.test(parent.id.name)) {
     return true;
   }
-  if (parent?.type === "ExportDefaultDeclaration") {
+  if (parent?.type === "ExportDefaultDeclaration") return true;
+  return false;
+}
+function isHelperFunction(node, parent) {
+  if (node.body?.type !== "BlockStatement") return false;
+  if (node.type === "FunctionDeclaration" && node.id?.name) {
+    return /^[a-z]/.test(node.id.name);
+  }
+  if (parent?.type === "VariableDeclarator" && parent.id?.type === "Identifier" && /^[a-z]/.test(parent.id.name)) {
     return true;
   }
   return false;
+}
+function getHelperName(node, parent) {
+  if (node.type === "FunctionDeclaration" && node.id?.name) {
+    return node.id.name;
+  }
+  if (parent?.type === "VariableDeclarator" && parent.id?.type === "Identifier") {
+    return parent.id.name;
+  }
+  return null;
+}
+function alreadyHasTParam(node) {
+  return node.params?.some(
+    (p) => p.type === "Identifier" && p.name === "t"
+  );
 }
 function replaceStringNode(node, filePath, fileStrings, sourceType) {
   if (!node) return [node, 0];
@@ -5613,11 +5686,13 @@ function transformFile(filePath, appRoot, strings, localeData) {
     return { filePath, modified: false, replacements: 0 };
   }
   let totalReplacements = 0;
-  const componentBlocks = [];
+  const componentBlocks = /* @__PURE__ */ new Set();
+  const helpersNeedingT = /* @__PURE__ */ new Map();
+  const helperNamesWithT = /* @__PURE__ */ new Set();
   (0, import_ast_types.visit)(ast, {
-    // ── JSX text: <Text>Hello</Text> ─────────────────────────────────────────
     visitJSXText(nodePath) {
-      const trimmed = nodePath.node.value.trim();
+      const originalValue = nodePath.node.value;
+      const trimmed = originalValue.trim();
       if (!trimmed) return this.traverse(nodePath);
       const extracted = findExtracted(
         trimmed,
@@ -5625,15 +5700,41 @@ function transformFile(filePath, appRoot, strings, localeData) {
         fileStrings,
         "jsx-text"
       );
-      if (extracted) {
-        const call = buildTCall(extracted.fullKey);
+      if (!extracted) return this.traverse(nodePath);
+      const leadingChar = originalValue[0];
+      const trailingChar = originalValue[originalValue.length - 1];
+      const hasLeadingSpace = (() => {
+        if (leadingChar !== " ") return false;
+        const contentStart = originalValue.indexOf(trimmed[0]);
+        if (contentStart === 0) return false;
+        const beforeContent = originalValue.slice(0, contentStart);
+        return !beforeContent.includes("\n");
+      })();
+      const hasTrailingSpace = (() => {
+        if (trailingChar !== " ") return false;
+        const contentEnd = originalValue.lastIndexOf(
+          trimmed[trimmed.length - 1]
+        );
+        const afterContent = originalValue.slice(contentEnd + 1);
+        return !afterContent.includes("\n");
+      })();
+      const call = buildTCall(extracted.fullKey);
+      if (!hasLeadingSpace && !hasTrailingSpace) {
         nodePath.replace(buildJSXExpression(call));
         totalReplacements++;
         return false;
       }
-      this.traverse(nodePath);
+      const nodes = [];
+      if (hasLeadingSpace) nodes.push(import_ast_types.builders.jsxText(" "));
+      nodes.push(buildJSXExpression(call));
+      if (hasTrailingSpace) nodes.push(import_ast_types.builders.jsxText(" "));
+      nodePath.replace(nodes[0]);
+      for (let i = nodes.length - 1; i >= 1; i--) {
+        nodePath.insertAfter(nodes[i]);
+      }
+      totalReplacements++;
+      return false;
     },
-    // ── JSX expression: <Text>{"Hello"}</Text> ───────────────────────────────
     visitJSXExpressionContainer(nodePath) {
       const parent = nodePath.parent?.node;
       const isChild = parent?.type === "JSXElement" || parent?.type === "JSXFragment";
@@ -5654,9 +5755,8 @@ function transformFile(filePath, appRoot, strings, localeData) {
       }
       this.traverse(nodePath);
     },
-    // ── JSX attribute: <Comp title="Hello" /> ────────────────────────────────
     visitJSXAttribute(nodePath) {
-      const { name, value } = nodePath.node;
+      const { value } = nodePath.node;
       if (value?.type === "StringLiteral" || value?.type === "Literal") {
         const strValue = value.value;
         if (typeof strValue === "string") {
@@ -5676,7 +5776,6 @@ function transformFile(filePath, appRoot, strings, localeData) {
       }
       this.traverse(nodePath);
     },
-    // ── Call expressions: Alert.alert(), toast.show() ────────────────────────
     visitCallExpression(nodePath) {
       const { callee, arguments: args } = nodePath.node;
       let calleeName = null;
@@ -5707,11 +5806,9 @@ function transformFile(filePath, appRoot, strings, localeData) {
       }
       this.traverse(nodePath);
     },
-    // ── Throw: throw new Error('msg') ────────────────────────────────────────
     visitThrowStatement(nodePath) {
       const { argument } = nodePath.node;
-      if (argument?.type === "NewExpression" && argument.callee?.type === "Identifier" && // ← narrow first
-      argument.callee.name === "Error") {
+      if (argument?.type === "NewExpression" && argument.callee?.type === "Identifier" && argument.callee.name === "Error") {
         argument.arguments.forEach((arg, index) => {
           const isStr = arg.type === "StringLiteral" || arg.type === "Literal";
           if (!isStr || typeof arg.value !== "string") return;
@@ -5728,19 +5825,17 @@ function transformFile(filePath, appRoot, strings, localeData) {
       }
       this.traverse(nodePath);
     },
-    // ── Collect React component blocks for hook injection ────────────────────
-    /**
-     * We collect block bodies here and inject the hook AFTER traversal.
-     * This avoids visiting the injected node during the same traversal.
-     *
-     * Each function type is handled in its own visitor — combining them
-     * into one does not work reliably with ast-types visit().
-     */
+    // ── Component visitors — collect blocks for hook injection ────────────────
     visitFunctionDeclaration(nodePath) {
       const node = nodePath.node;
       const parent = nodePath.parent?.node;
       if (isComponentFunction(node, parent)) {
-        componentBlocks.push(node.body);
+        componentBlocks.add(node.body);
+      } else if (isHelperFunction(node, parent)) {
+        if (!isNestedInsideComponent(nodePath)) {
+          const name = getHelperName(node, parent);
+          if (name) helpersNeedingT.set(name, node);
+        }
       }
       this.traverse(nodePath);
     },
@@ -5748,7 +5843,12 @@ function transformFile(filePath, appRoot, strings, localeData) {
       const node = nodePath.node;
       const parent = nodePath.parent?.node;
       if (isComponentFunction(node, parent)) {
-        componentBlocks.push(node.body);
+        componentBlocks.add(node.body);
+      } else if (isHelperFunction(node, parent)) {
+        if (!isNestedInsideComponent(nodePath)) {
+          const name = getHelperName(node, parent);
+          if (name) helpersNeedingT.set(name, node);
+        }
       }
       this.traverse(nodePath);
     },
@@ -5756,7 +5856,12 @@ function transformFile(filePath, appRoot, strings, localeData) {
       const node = nodePath.node;
       const parent = nodePath.parent?.node;
       if (isComponentFunction(node, parent)) {
-        componentBlocks.push(node.body);
+        componentBlocks.add(node.body);
+      } else if (isHelperFunction(node, parent)) {
+        if (!isNestedInsideComponent(nodePath)) {
+          const name = getHelperName(node, parent);
+          if (name) helpersNeedingT.set(name, node);
+        }
       }
       this.traverse(nodePath);
     }
@@ -5764,13 +5869,50 @@ function transformFile(filePath, appRoot, strings, localeData) {
   if (totalReplacements === 0) {
     return { filePath, modified: false, replacements: 0 };
   }
+  for (const [name, funcNode] of helpersNeedingT.entries()) {
+    if (functionBodyContainsTCall(funcNode.body)) {
+      helperNamesWithT.add(name);
+    }
+  }
+  for (const name of helperNamesWithT) {
+    const funcNode = helpersNeedingT.get(name);
+    if (!funcNode) continue;
+    if (alreadyHasTParam(funcNode)) continue;
+    funcNode.params.push(buildTFunctionParam());
+    logger.debug(`  Injected t: TFunction param into helper: ${name}`);
+  }
+  if (helperNamesWithT.size > 0) {
+    (0, import_ast_types.visit)(ast, {
+      visitCallExpression(nodePath) {
+        const { callee, arguments: args } = nodePath.node;
+        if (callee.type !== "Identifier") return this.traverse(nodePath);
+        const calleeName = callee.name;
+        if (!helperNamesWithT.has(calleeName)) return this.traverse(nodePath);
+        const lastArg = args[args.length - 1];
+        const alreadyHasT = lastArg?.type === "Identifier" && lastArg.name === "t";
+        if (!alreadyHasT) {
+          nodePath.node.arguments.push(import_ast_types.builders.identifier("t"));
+          logger.debug(`  Added t argument to call site: ${calleeName}()`);
+        }
+        this.traverse(nodePath);
+      }
+    });
+  }
   for (const block of componentBlocks) {
     if (block?.type === "BlockStatement") {
       injectTDeclaration(block.body);
     }
   }
-  if (componentBlocks.length > 0) {
-    addUseTranslationImport(ast.program.body);
+  if (componentBlocks.size > 0) {
+    addImport(
+      ast.program.body,
+      "react-i18next",
+      "useTranslation",
+      buildUseTranslationImport
+    );
+  }
+  if (helperNamesWithT.size > 0) {
+    addImport(ast.program.body, "i18next", "TFunction", buildTFunctionImport);
   }
   const newCode = recast.print(ast).code;
   return {
@@ -5779,6 +5921,24 @@ function transformFile(filePath, appRoot, strings, localeData) {
     replacements: totalReplacements,
     newCode
   };
+}
+function functionBodyContainsTCall(block) {
+  if (!block || block.type !== "BlockStatement") return false;
+  return nodeContainsTCall(block);
+}
+function nodeContainsTCall(node) {
+  if (!node || typeof node !== "object") return false;
+  if (node.type === "CallExpression" && node.callee?.type === "Identifier" && node.callee?.name === "t") {
+    return true;
+  }
+  for (const value of Object.values(node)) {
+    if (Array.isArray(value)) {
+      if (value.some((child) => nodeContainsTCall(child))) return true;
+    } else if (value && typeof value === "object") {
+      if (nodeContainsTCall(value)) return true;
+    }
+  }
+  return false;
 }
 async function transformProject(appRoot, strings, localeData) {
   const uniqueFiles = [...new Set(strings.map((s) => s.filePath))];
@@ -5810,16 +5970,76 @@ var init_transformer = __esm({
   }
 });
 
+// src/utils/backup.ts
+function backupFile(filePath) {
+  const backupPath = `${filePath}${BAK_EXT}`;
+  if (!import_fs10.default.existsSync(backupPath)) {
+    import_fs10.default.copyFileSync(filePath, backupPath);
+    logger.debug(`  Backed up: ${import_path9.default.basename(filePath)}`);
+  }
+}
+async function findBackupFiles(appRoot) {
+  return (0, import_glob2.glob)(`**/*${BAK_EXT}`, {
+    cwd: appRoot,
+    absolute: true,
+    ignore: ["**/node_modules/**"]
+  });
+}
+async function restoreAllBackups(appRoot) {
+  const backupFiles = await findBackupFiles(appRoot);
+  if (backupFiles.length === 0) return 0;
+  let restored = 0;
+  for (const backupPath of backupFiles) {
+    const originalPath = backupPath.slice(0, -BAK_EXT.length);
+    try {
+      import_fs10.default.copyFileSync(backupPath, originalPath);
+      import_fs10.default.unlinkSync(backupPath);
+      restored++;
+      logger.success(`Restored: ${import_path9.default.relative(appRoot, originalPath)}`);
+    } catch (err) {
+      logger.error(
+        `Failed to restore ${import_path9.default.relative(appRoot, originalPath)}: ${String(err)}`
+      );
+    }
+  }
+  return restored;
+}
+async function deleteAllBackups(appRoot) {
+  const backupFiles = await findBackupFiles(appRoot);
+  let deleted = 0;
+  for (const backupPath of backupFiles) {
+    try {
+      import_fs10.default.unlinkSync(backupPath);
+      deleted++;
+    } catch (err) {
+      logger.error(`Failed to delete backup: ${backupPath}: ${String(err)}`);
+    }
+  }
+  return deleted;
+}
+var import_fs10, import_path9, import_glob2, BAK_EXT;
+var init_backup = __esm({
+  "src/utils/backup.ts"() {
+    "use strict";
+    init_cjs_shims();
+    import_fs10 = __toESM(require("fs"));
+    import_path9 = __toESM(require("path"));
+    import_glob2 = require("glob");
+    init_logger();
+    BAK_EXT = ".i18nbak";
+  }
+});
+
 // src/commands/replace.ts
 var replace_exports = {};
 __export(replace_exports, {
   replace: () => replace
 });
 async function replace(options) {
-  const appRoot = import_path9.default.resolve(options.path);
+  const appRoot = import_path10.default.resolve(options.path);
   const isDryRun = options.dryRun ?? false;
   const config = await requireConfig(appRoot);
-  const localesDir = import_path9.default.join(appRoot, config.localesDir);
+  const localesDir = import_path10.default.join(appRoot, config.localesDir);
   const dirError = validateLocalesDir(config.localesDir, appRoot);
   if (dirError) {
     logger.error(`Invalid "localesDir" in your config:
@@ -5835,7 +6055,7 @@ async function replace(options) {
   );
   if (!exists(localeFilePath)) {
     logger.error(
-      `Locale file not found: ${import_path9.default.relative(appRoot, localeFilePath)}
+      `Locale file not found: ${import_path10.default.relative(appRoot, localeFilePath)}
   Run "rai scan" first to generate the locale file.`
     );
     process.exit(1);
@@ -5846,7 +6066,7 @@ async function replace(options) {
     config.localeFileName
   );
   const keyCount = Object.keys(localeData).length;
-  logger.info(`  Locale file : ${import_path9.default.relative(appRoot, localeFilePath)}`);
+  logger.info(`  Locale file : ${import_path10.default.relative(appRoot, localeFilePath)}`);
   logger.info(`  Keys loaded : ${keyCount}`);
   if (keyCount === 0) {
     logger.error(`The locale file is empty. Run "rai scan" to populate it.`);
@@ -5884,7 +6104,7 @@ async function replace(options) {
   logger.newline();
   modifiedResults.forEach((result) => {
     logger.info(
-      `  ${import_chalk3.default.cyan(import_path9.default.relative(appRoot, result.filePath))}` + import_chalk3.default.gray(` \u2014 ${result.replacements} replacement(s)`)
+      `  ${import_chalk3.default.cyan(import_path10.default.relative(appRoot, result.filePath))}` + import_chalk3.default.gray(` \u2014 ${result.replacements} replacement(s)`)
     );
   });
   logger.newline();
@@ -5916,14 +6136,15 @@ async function replace(options) {
   for (const result of modifiedResults) {
     if (!result.newCode) continue;
     try {
+      backupFile(result.filePath);
       writeFile(result.filePath, result.newCode);
       written++;
       logger.success(
-        `${import_path9.default.relative(appRoot, result.filePath)} \u2014 ${result.replacements} replacement(s)`
+        `${import_path10.default.relative(appRoot, result.filePath)} \u2014 ${result.replacements} replacement(s)`
       );
     } catch (err) {
       logger.error(
-        `Failed to write ${import_path9.default.relative(appRoot, result.filePath)}: ${String(err)}`
+        `Failed to write ${import_path10.default.relative(appRoot, result.filePath)}: ${String(err)}`
       );
     }
   }
@@ -5934,26 +6155,31 @@ async function replace(options) {
   1. Run your app and verify everything works:
        npx expo start
 
-  2. If something looks wrong, revert using git:
+  2. If something looks wrong, revert using git or the revert command:
        ${import_chalk3.default.cyan("git checkout .")}
        This discards all uncommitted changes and restores your files.
        This is why we asked you to commit before running replace.
+       or
+       ${import_chalk3.default.cyan("rai revert")}
+       This restores all files to their state before replace was run.
 
   3. If everything looks good, commit:
+       ${import_chalk3.default.cyan("rai revert --clean")}
+       makes sure all backup files are deleted (they are not needed anymore)
        ${import_chalk3.default.cyan("git add .")}
        ${import_chalk3.default.cyan('git commit -m "feat: replace strings with i18n t() calls"')}
 
   4. To add more languages in the future:
-       \u2022 Copy ${import_path9.default.relative(appRoot, localeFilePath)} and translate the values
+       \u2022 Copy ${import_path10.default.relative(appRoot, localeFilePath)} and translate the values
        \u2022 Add the new language to your i18n.ts resources object
   `);
 }
-var import_path9, import_chalk3, import_ora2;
+var import_path10, import_chalk3, import_ora2;
 var init_replace = __esm({
   "src/commands/replace.ts"() {
     "use strict";
     init_cjs_shims();
-    import_path9 = __toESM(require("path"));
+    import_path10 = __toESM(require("path"));
     import_chalk3 = __toESM(require("chalk"));
     import_ora2 = __toESM(require("ora"));
     init_logger();
@@ -5962,6 +6188,84 @@ var init_replace = __esm({
     init_scaffolder();
     init_transformer();
     init_fs();
+    init_prompt();
+    init_backup();
+  }
+});
+
+// src/commands/revert.ts
+var revert_exports = {};
+__export(revert_exports, {
+  revert: () => revert
+});
+async function revert(options) {
+  const appRoot = import_path11.default.resolve(options.path);
+  const isClean = options.clean ?? false;
+  logger.section(`rai \u2014 ${isClean ? "Clean backups" : "Revert"}`);
+  const backupFiles = await findBackupFiles(appRoot);
+  if (backupFiles.length === 0) {
+    logger.warn("No backup files found.");
+    logger.info(
+      '  Backup files (.i18nbak) are created when you run "rai replace".\n  If you already ran "rai revert --clean", they have been deleted.\n  You can also use git to revert: git checkout .'
+    );
+    process.exit(0);
+  }
+  logger.newline();
+  logger.info(`  Found ${backupFiles.length} backup file(s):`);
+  backupFiles.forEach((f) => {
+    const originalPath = f.slice(0, -".i18nbak".length);
+    logger.dim(`    ${import_path11.default.relative(appRoot, originalPath)}`);
+  });
+  logger.newline();
+  if (isClean) {
+    const shouldClean = await confirm(
+      `Delete ${backupFiles.length} backup file(s) without restoring source files?`,
+      false
+    );
+    if (!shouldClean) {
+      logger.info("Aborted. No files were changed.");
+      process.exit(0);
+    }
+    const deleted = await deleteAllBackups(appRoot);
+    logger.newline();
+    logger.success(`Deleted ${deleted} backup file(s).`);
+    logger.info(`
+  Your source files were not changed.
+  Ready to commit:
+    ${import_chalk4.default.cyan("git add .")}
+    ${import_chalk4.default.cyan('git commit -m "feat: replace strings with i18n t() calls"')}
+    `);
+  } else {
+    logger.warn(
+      "  This will restore your source files to their pre-replace state.\n  Your current i18n changes will be lost."
+    );
+    logger.newline();
+    const shouldRestore = await confirm(
+      `Restore ${backupFiles.length} file(s) to their pre-replace state?`,
+      false
+      // default to No — this is destructive
+    );
+    if (!shouldRestore) {
+      logger.info("Aborted. No files were changed.");
+      process.exit(0);
+    }
+    const restored = await restoreAllBackups(appRoot);
+    logger.newline();
+    logger.success(`Restored ${restored} file(s) to their original state.`);
+    logger.info(
+      '\n  Your source files have been reverted.\n  The locale file was not changed.\n  Run "rai replace" again when ready.'
+    );
+  }
+}
+var import_path11, import_chalk4;
+var init_revert = __esm({
+  "src/commands/revert.ts"() {
+    "use strict";
+    init_cjs_shims();
+    import_path11 = __toESM(require("path"));
+    import_chalk4 = __toESM(require("chalk"));
+    init_logger();
+    init_backup();
     init_prompt();
   }
 });
@@ -5988,6 +6292,13 @@ import_commander.program.command("scan").description("Scan the app and generate 
 import_commander.program.command("replace").description("Replace raw strings in source files with t() calls").option("-p, --path <path>", "Root path of the project", ".").option("--dry-run", "Preview without writing files").action(async (options) => {
   const { replace: replace2 } = await Promise.resolve().then(() => (init_replace(), replace_exports));
   await replace2(options);
+});
+import_commander.program.command("revert").description("Restore source files to their pre-replace state").option("-p, --path <path>", "Root path of the project", ".").option(
+  "--clean",
+  "Delete backup files without restoring (use after verifying replace output)"
+).action(async (options) => {
+  const { revert: revert2 } = await Promise.resolve().then(() => (init_revert(), revert_exports));
+  await revert2(options);
 });
 import_commander.program.parse(process.argv);
 //# sourceMappingURL=cli.js.map

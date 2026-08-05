@@ -6,28 +6,6 @@ import { logger } from "../utils/logger";
 import type { ExtractedString } from "./scanner";
 import type { LocaleFile } from "./scaffolder";
 
-/**
- * Why recast + ast-types instead of @babel/traverse?
- *
- * recast.parse() returns a recast-wrapped AST. Passing this to
- * @babel/traverse causes crashes because Babel's scope analysis
- * expects a raw Babel AST, not a recast-wrapped one.
- *
- * The correct pairing is:
- *   recast.parse()  →  ast-types visit()  →  recast.print()
- *
- * ast-types is recast's companion library (it's a dependency of recast,
- * already installed). It provides the visit() function which traverses
- * recast ASTs correctly.
- *
- * recast.print() then only reprints nodes that were actually modified,
- * producing minimal git diffs.
- */
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
-
 export interface TransformResult {
   filePath: string;
   modified: boolean;
@@ -35,48 +13,65 @@ export interface TransformResult {
   newCode?: string;
 }
 
+/**
+ * Checks whether a given node path is nested inside a React component
+ * function body — meaning it has access to the component's scope
+ * through closure.
+ *
+ * If true, the helper does NOT need t passed as a parameter because
+ * it can close over the t declared in the enclosing component.
+ *
+ * If false, the helper is at module level and has no access to any
+ * component's t — it needs t: TFunction as a parameter.
+ *
+ * @param nodePath - The path of the helper function node
+ */
+function isNestedInsideComponent(nodePath: any): boolean {
+  let current = nodePath.parent;
+
+  while (current) {
+    const node = current.node;
+    const parent = current.parent?.node;
+
+    const isFn =
+      node?.type === "FunctionDeclaration" ||
+      node?.type === "FunctionExpression" ||
+      node?.type === "ArrowFunctionExpression";
+
+    if (isFn && isComponentFunction(node, parent)) {
+      return true;
+    }
+
+    current = current.parent;
+  }
+
+  return false;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AST node builders
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Builds: t('some.key')
- */
 function buildTCall(key: string): any {
   return b.callExpression(b.identifier("t"), [b.literal(key)]);
 }
 
-/**
- * Builds: t('some.key', { param1, param2 })
- *
- * Shorthand properties ({ firstName } instead of { firstName: firstName })
- * must be set via the `shorthand` property on the node AFTER creation —
- * b.property() does not accept a shorthand argument.
- */
 function buildTCallWithParams(key: string, params: string[]): any {
   const props = params.map((param) => {
     const prop = b.property("init", b.identifier(param), b.identifier(param));
-    // Shorthand must be set after construction, not passed as an argument
     prop.shorthand = true;
     return prop;
   });
-
   return b.callExpression(b.identifier("t"), [
     b.literal(key),
     b.objectExpression(props),
   ]);
 }
 
-/**
- * Builds: {t('some.key')} as a JSXExpressionContainer
- */
 function buildJSXExpression(call: any): any {
   return b.jsxExpressionContainer(call);
 }
 
-/**
- * Builds: import { useTranslation } from 'react-i18next'
- */
 function buildUseTranslationImport(): any {
   return b.importDeclaration(
     [
@@ -89,22 +84,66 @@ function buildUseTranslationImport(): any {
   );
 }
 
-/**
- * Builds: const { t } = useTranslation()
- */
 function buildUseTranslationCall(): any {
+  const prop = b.property("init", b.identifier("t"), b.identifier("t"));
+  prop.shorthand = true;
   return b.variableDeclaration("const", [
     b.variableDeclarator(
-      b.objectPattern([
-        b.objectProperty.from({
-          key: b.identifier("t"),
-          value: b.identifier("t"),
-          shorthand: true,
-        }),
-      ]),
+      b.objectPattern([prop]),
       b.callExpression(b.identifier("useTranslation"), []),
     ),
   ]);
+}
+
+/**
+ * Builds: import { TFunction } from 'i18next'
+ *
+ * TFunction is the type of the `t` function returned by useTranslation.
+ * We import it so helper functions can type their `t` parameter correctly:
+ *   function getStatusText(status: Status, t: TFunction) { ... }
+ */
+function buildTFunctionImport(): any {
+  return b.importDeclaration(
+    [b.importSpecifier(b.identifier("TFunction"), b.identifier("TFunction"))],
+    b.literal("i18next"),
+  );
+}
+
+/**
+ * Builds a `t: TFunction` parameter node for a function signature.
+ *
+ * The result is an Identifier node named 't' with a TypeAnnotation
+ * of TFunction — which TypeScript renders as: t: TFunction
+ *
+ * We build the type annotation manually since ast-types doesn't have
+ * a first-class builder for TypeScript type references on parameters.
+ */
+function buildTFunctionParam(): any {
+  const param = b.identifier("t");
+
+  /**
+   * Attach a TypeScript type annotation to the parameter.
+   * This produces the `: TFunction` part of `t: TFunction`.
+   *
+   * The annotation structure:
+   *   typeAnnotation: TSTypeAnnotation {
+   *     typeAnnotation: TSTypeReference {
+   *       typeName: Identifier { name: 'TFunction' }
+   *     }
+   *   }
+   */
+  param.typeAnnotation = {
+    type: "TSTypeAnnotation",
+    typeAnnotation: {
+      type: "TSTypeReference",
+      typeName: {
+        type: "Identifier",
+        name: "TFunction",
+      },
+    },
+  } as any;
+
+  return param;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,11 +164,6 @@ function findExtracted(
   );
 }
 
-/**
- * Reconstructs the template literal display text with {{param}} placeholders
- * (must match processTemplateLiteral in scanner.ts exactly)
- * then looks it up in the extracted strings.
- */
 function findExtractedTemplate(
   node: any,
   filePath: string,
@@ -140,11 +174,9 @@ function findExtractedTemplate(
 
   node.quasis.forEach((quasi: any, i: number) => {
     text += quasi.value.cooked ?? quasi.value.raw;
-
     if (i < node.expressions.length) {
       const expr = node.expressions[i];
       let paramName: string;
-
       if (expr.type === "Identifier") {
         paramName = expr.name;
       } else if (
@@ -155,7 +187,6 @@ function findExtractedTemplate(
       } else {
         paramName = `arg${argIndex++}`;
       }
-
       text += `{{${paramName}}}`;
     }
   });
@@ -169,35 +200,41 @@ function findExtractedTemplate(
 // Import helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function hasUseTranslationImport(programBody: any[]): boolean {
+function hasImport(programBody: any[], source: string, name: string): boolean {
   return programBody.some(
     (node) =>
       node.type === "ImportDeclaration" &&
-      node.source.value === "react-i18next" &&
+      node.source.value === source &&
       node.specifiers?.some(
         (spec: any) =>
-          spec.type === "ImportSpecifier" &&
-          spec.imported?.name === "useTranslation",
+          spec.type === "ImportSpecifier" && spec.imported?.name === name,
       ),
   );
 }
 
-function addUseTranslationImport(programBody: any[]): void {
-  if (hasUseTranslationImport(programBody)) return;
+/**
+ * Inserts an import declaration after the last existing import in the file.
+ * Does nothing if an import from the same source with the same name exists.
+ */
+function addImport(
+  programBody: any[],
+  source: string,
+  name: string,
+  buildFn: () => any,
+): void {
+  if (hasImport(programBody, source, name)) return;
 
   let lastImportIndex = -1;
   for (let i = 0; i < programBody.length; i++) {
-    if (programBody[i].type === "ImportDeclaration") {
-      lastImportIndex = i;
-    }
+    if (programBody[i].type === "ImportDeclaration") lastImportIndex = i;
   }
 
-  const importNode = buildUseTranslationImport();
+  const node = buildFn();
 
   if (lastImportIndex >= 0) {
-    programBody.splice(lastImportIndex + 1, 0, importNode);
+    programBody.splice(lastImportIndex + 1, 0, node);
   } else {
-    programBody.unshift(importNode);
+    programBody.unshift(node);
   }
 }
 
@@ -208,12 +245,10 @@ function addUseTranslationImport(programBody: any[]): void {
 function hasTDeclaration(statements: any[]): boolean {
   return statements.some((stmt) => {
     if (stmt.type !== "VariableDeclaration") return false;
-
     return stmt.declarations.some((decl: any) => {
       if (decl.id?.type !== "ObjectPattern") return false;
       if (decl.init?.type !== "CallExpression") return false;
       if (decl.init?.callee?.name !== "useTranslation") return false;
-
       return decl.id.properties?.some(
         (prop: any) => prop.key?.name === "t" || prop.value?.name === "t",
       );
@@ -226,24 +261,17 @@ function injectTDeclaration(blockBody: any[]): void {
   blockBody.unshift(buildUseTranslationCall());
 }
 
-/**
- * Checks if a function node looks like a React component.
- *
- * Criteria:
- *   - Has a block body (not an expression like () => <JSX />)
- *   - Name starts with uppercase, OR it is a default export
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// Component and helper detection
+// ─────────────────────────────────────────────────────────────────────────────
+
 function isComponentFunction(node: any, parent: any): boolean {
-  // Must have block body to inject hook into
   if (node.body?.type !== "BlockStatement") return false;
 
-  // Named function: function MyScreen() {}
   if (node.type === "FunctionDeclaration" && node.id?.name) {
     return /^[A-Z]/.test(node.id.name);
   }
 
-  // Arrow/function expression assigned to uppercase variable:
-  // const MyScreen = () => {}
   if (
     parent?.type === "VariableDeclarator" &&
     parent.id?.type === "Identifier" &&
@@ -252,28 +280,65 @@ function isComponentFunction(node: any, parent: any): boolean {
     return true;
   }
 
-  // export default function() {} or export default () => {}
-  if (parent?.type === "ExportDefaultDeclaration") {
+  if (parent?.type === "ExportDefaultDeclaration") return true;
+
+  return false;
+}
+
+/**
+ * Checks if a function is a helper — lowercase name, block body.
+ * Helpers cannot call useTranslation() directly (rules of hooks).
+ * Instead, they receive `t` as a parameter from the component.
+ */
+function isHelperFunction(node: any, parent: any): boolean {
+  if (node.body?.type !== "BlockStatement") return false;
+
+  if (node.type === "FunctionDeclaration" && node.id?.name) {
+    return /^[a-z]/.test(node.id.name);
+  }
+
+  if (
+    parent?.type === "VariableDeclarator" &&
+    parent.id?.type === "Identifier" &&
+    /^[a-z]/.test(parent.id.name)
+  ) {
     return true;
   }
 
   return false;
 }
 
+/**
+ * Gets the name of a helper function from its node + parent.
+ * Returns null if the name cannot be determined.
+ */
+function getHelperName(node: any, parent: any): string | null {
+  if (node.type === "FunctionDeclaration" && node.id?.name) {
+    return node.id.name;
+  }
+  if (
+    parent?.type === "VariableDeclarator" &&
+    parent.id?.type === "Identifier"
+  ) {
+    return parent.id.name;
+  }
+  return null;
+}
+
+/**
+ * Checks whether `t` is already a parameter of the given function node.
+ * Used to avoid adding the parameter twice if replace is run again.
+ */
+function alreadyHasTParam(node: any): boolean {
+  return node.params?.some(
+    (p: any) => p.type === "Identifier" && p.name === "t",
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Expression replacement
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Replaces a string expression node with a t() call.
- * Returns [newNode, replacementCount].
- *
- * Handles recursively:
- *   StringLiteral         → t('key')
- *   TemplateLiteral       → t('key', { params })
- *   ConditionalExpression → recurse into branches
- *   LogicalExpression     → recurse into operands
- */
 function replaceStringNode(
   node: any,
   filePath: string,
@@ -282,7 +347,6 @@ function replaceStringNode(
 ): [any, number] {
   if (!node) return [node, 0];
 
-  // ── String literal ─────────────────────────────────────────────────────────
   if (node.type === "StringLiteral" || node.type === "Literal") {
     const value = node.value;
     if (typeof value !== "string") return [node, 0];
@@ -298,7 +362,6 @@ function replaceStringNode(
     return [call, 1];
   }
 
-  // ── Template literal ───────────────────────────────────────────────────────
   if (node.type === "TemplateLiteral") {
     const extracted = findExtractedTemplate(node, filePath, fileStrings);
     if (!extracted) return [node, 0];
@@ -311,10 +374,8 @@ function replaceStringNode(
     return [call, 1];
   }
 
-  // ── Ternary ────────────────────────────────────────────────────────────────
   if (node.type === "ConditionalExpression") {
     let count = 0;
-
     const [newConsequent, c1] = replaceStringNode(
       node.consequent,
       filePath,
@@ -340,10 +401,8 @@ function replaceStringNode(
     return [node, count];
   }
 
-  // ── Logical expression ─────────────────────────────────────────────────────
   if (node.type === "LogicalExpression") {
     let count = 0;
-
     const [newLeft, c1] = replaceStringNode(
       node.left,
       filePath,
@@ -394,7 +453,6 @@ export function transformFile(
     return { filePath, modified: false, replacements: 0 };
   }
 
-  // ── Parse with recast ─────────────────────────────────────────────────────
   let ast: any;
   try {
     ast = recast.parse(code, {
@@ -427,27 +485,31 @@ export function transformFile(
   let totalReplacements = 0;
 
   /**
-   * Collect component block bodies to inject the hook into.
-   * We do this after traversal to avoid modifying the AST
-   * while it is being traversed.
+   * Component blocks that need `const { t } = useTranslation()` injected.
    */
-  const componentBlocks: any[] = [];
+  const componentBlocks = new Set<any>();
 
-  // ── Visit with ast-types (recast's companion traversal API) ───────────────
   /**
-   * ast-types visit() is the correct traversal API for recast ASTs.
+   * Helper function nodes that need `t: TFunction` added to their params.
    *
-   * Rules for visit():
-   *   - Each visitor method is named `visit<NodeType>`
-   *   - Call `this.traverse(nodePath)` to continue traversal into children
-   *   - Call `return false` to stop traversal of this subtree
-   *   - To replace a node, mutate the parent's property directly
-   *     (nodePath.replace() also works but direct mutation is simpler here)
+   * We store the node itself (not just its name) so we can directly
+   * mutate node.params after traversal.
+   *
+   * Map shape: helperName → { node, replacementsInsideIt }
    */
+  const helpersNeedingT = new Map<string, any>();
+
+  /**
+   * Names of helpers that received t() calls inside them.
+   * Used to find their call sites and add `t` as an argument.
+   */
+  const helperNamesWithT = new Set<string>();
+
+  // ── Traversal ─────────────────────────────────────────────────────────────
   visit(ast, {
-    // ── JSX text: <Text>Hello</Text> ─────────────────────────────────────────
     visitJSXText(nodePath) {
-      const trimmed = (nodePath.node.value as string).trim();
+      const originalValue = nodePath.node.value as string;
+      const trimmed = originalValue.trim();
       if (!trimmed) return this.traverse(nodePath);
 
       const extracted = findExtracted(
@@ -457,31 +519,113 @@ export function transformFile(
         "jsx-text",
       );
 
-      if (extracted) {
-        const call = buildTCall(extracted.fullKey);
+      if (!extracted) return this.traverse(nodePath);
+
+      /**
+       * Determine whether to preserve leading/trailing whitespace.
+       *
+       * The rule: only preserve a space if the whitespace is a SINGLE
+       * SPACE CHARACTER (0x20), not newlines or indentation.
+       *
+       * Why? JSXText nodes often start with \n + indentation spaces
+       * because of how JSX is formatted:
+       *
+       *   <Text>
+       *     Hello world        ← originalValue is "\n    Hello world"
+       *   </Text>
+       *
+       * That leading \n + spaces is formatting whitespace — React ignores
+       * it for rendering. We must NOT emit a {" "} for it.
+       *
+       * But in:
+       *   <Text>shake device or press <Code>m</Code> in terminal</Text>
+       *
+       * The JSXText "shake device or press " has a TRAILING SPACE that IS
+       * meaningful — it separates the text from the <Code> element visually.
+       * Same for " in terminal" which has a leading space.
+       *
+       * Detection: check the character immediately before/after the trimmed
+       * content in the original string. If it's exactly a space (not \n,
+       * not \t, not multiple spaces that are indentation), preserve it.
+       */
+      const leadingChar = originalValue[0];
+      const trailingChar = originalValue[originalValue.length - 1];
+
+      /**
+       * A space is "meaningful" if:
+       *   1. It is a space character (not newline or tab)
+       *   2. It is a single space OR directly adjacent to non-space content
+       *      (not part of a multi-space indentation block)
+       *
+       * The simplest reliable check: the character right before/after the
+       * trimmed text in the original is exactly ' ' (0x20).
+       *
+       * We also verify it's not preceded by a newline — if the content
+       * before the space is a newline, it's indentation, not a word space.
+       */
+      const hasLeadingSpace = (() => {
+        if (leadingChar !== " ") return false;
+        // Find where the trimmed content starts
+        const contentStart = originalValue.indexOf(trimmed[0]);
+        if (contentStart === 0) return false;
+        // Check if there's a newline anywhere before the content
+        const beforeContent = originalValue.slice(0, contentStart);
+        return !beforeContent.includes("\n");
+      })();
+
+      const hasTrailingSpace = (() => {
+        if (trailingChar !== " ") return false;
+        // Find where the trimmed content ends
+        const contentEnd = originalValue.lastIndexOf(
+          trimmed[trimmed.length - 1],
+        );
+        const afterContent = originalValue.slice(contentEnd + 1);
+        return !afterContent.includes("\n");
+      })();
+
+      const call = buildTCall(extracted.fullKey);
+
+      if (!hasLeadingSpace && !hasTrailingSpace) {
+        // No meaningful surrounding spaces — simple replacement
         nodePath.replace(buildJSXExpression(call));
         totalReplacements++;
-        /**
-         * After replacing, do NOT traverse the new node —
-         * it's a t() call, not a string, so nothing to visit inside it.
-         */
         return false;
       }
 
-      this.traverse(nodePath);
-    },
+      /**
+       * Build the list of replacement nodes, including space nodes
+       * only where the space is genuinely meaningful.
+       *
+       * We use b.jsxText(' ') for spaces rather than {" "} expressions
+       * because JSXText is lighter and produces cleaner output.
+       * Both render identically — React treats them the same way.
+       */
+      const nodes: any[] = [];
 
-    // ── JSX expression: <Text>{"Hello"}</Text> ───────────────────────────────
-    visitJSXExpressionContainer(nodePath) {
-      const parent = nodePath.parent?.node;
+      if (hasLeadingSpace) nodes.push(b.jsxText(" "));
+      nodes.push(buildJSXExpression(call));
+      if (hasTrailingSpace) nodes.push(b.jsxText(" "));
 
       /**
-       * Only process containers that are JSX children.
-       * Skip containers inside prop values like className={`flex`}.
+       * Replace the current node with the first replacement node,
+       * then insert remaining siblings after it.
+       *
+       * insertAfter inserts in reverse order so we iterate backwards
+       * to maintain the correct final order.
        */
+      nodePath.replace(nodes[0]);
+      for (let i = nodes.length - 1; i >= 1; i--) {
+        nodePath.insertAfter(nodes[i]);
+      }
+
+      totalReplacements++;
+      return false;
+    },
+
+    visitJSXExpressionContainer(nodePath) {
+      const parent = nodePath.parent?.node;
       const isChild =
         parent?.type === "JSXElement" || parent?.type === "JSXFragment";
-
       if (!isChild) return this.traverse(nodePath);
 
       const expr = nodePath.node.expression;
@@ -495,19 +639,15 @@ export function transformFile(
         fileStrings,
         "jsx-expression",
       );
-
       if (count > 0) {
         nodePath.node.expression = newExpr;
         totalReplacements += count;
       }
-
       this.traverse(nodePath);
     },
 
-    // ── JSX attribute: <Comp title="Hello" /> ────────────────────────────────
     visitJSXAttribute(nodePath) {
-      const { name, value } = nodePath.node;
-
+      const { value } = nodePath.node;
       if (value?.type === "StringLiteral" || value?.type === "Literal") {
         const strValue = value.value;
         if (typeof strValue === "string") {
@@ -517,7 +657,6 @@ export function transformFile(
             fileStrings,
             "jsx-attribute",
           );
-
           if (extracted) {
             nodePath.node.value = buildJSXExpression(
               buildTCall(extracted.fullKey),
@@ -526,23 +665,13 @@ export function transformFile(
           }
         }
       }
-
       this.traverse(nodePath);
     },
 
-    // ── Call expressions: Alert.alert(), toast.show() ────────────────────────
     visitCallExpression(nodePath) {
       const { callee, arguments: args } = nodePath.node;
-
       let calleeName: string | null = null;
 
-      /**
-       * We must check the node's type string before accessing .name
-       * because ast-types types callee as ExpressionKind — a broad union
-       * that doesn't guarantee a .name property.
-       *
-       * Checking node.type === 'Identifier' first narrows it safely.
-       */
       if (callee.type === "Identifier") {
         calleeName = (callee as any).name;
       } else if (
@@ -580,18 +709,15 @@ export function transformFile(
           });
         }
       }
-
       this.traverse(nodePath);
     },
 
-    // ── Throw: throw new Error('msg') ────────────────────────────────────────
     visitThrowStatement(nodePath) {
       const { argument } = nodePath.node;
-
       if (
         argument?.type === "NewExpression" &&
-        argument.callee?.type === "Identifier" && // ← narrow first
-        (argument.callee as any).name === "Error" // ← then access .name
+        argument.callee?.type === "Identifier" &&
+        (argument.callee as any).name === "Error"
       ) {
         argument.arguments.forEach((arg: any, index: number) => {
           const isStr = arg.type === "StringLiteral" || arg.type === "Literal";
@@ -609,24 +735,26 @@ export function transformFile(
           totalReplacements++;
         });
       }
-
       this.traverse(nodePath);
     },
 
-    // ── Collect React component blocks for hook injection ────────────────────
-    /**
-     * We collect block bodies here and inject the hook AFTER traversal.
-     * This avoids visiting the injected node during the same traversal.
-     *
-     * Each function type is handled in its own visitor — combining them
-     * into one does not work reliably with ast-types visit().
-     */
+    // ── Component visitors — collect blocks for hook injection ────────────────
     visitFunctionDeclaration(nodePath) {
       const node = nodePath.node;
       const parent = nodePath.parent?.node;
 
       if (isComponentFunction(node, parent)) {
-        componentBlocks.push(node.body);
+        componentBlocks.add(node.body);
+      } else if (isHelperFunction(node, parent)) {
+        /**
+         * Only register module-level helpers as needing t injected.
+         * Helpers defined INSIDE a component have access to the
+         * component's t via closure — no parameter needed.
+         */
+        if (!isNestedInsideComponent(nodePath)) {
+          const name = getHelperName(node, parent);
+          if (name) helpersNeedingT.set(name, node);
+        }
       }
 
       this.traverse(nodePath);
@@ -637,7 +765,12 @@ export function transformFile(
       const parent = nodePath.parent?.node;
 
       if (isComponentFunction(node, parent)) {
-        componentBlocks.push(node.body);
+        componentBlocks.add(node.body);
+      } else if (isHelperFunction(node, parent)) {
+        if (!isNestedInsideComponent(nodePath)) {
+          const name = getHelperName(node, parent);
+          if (name) helpersNeedingT.set(name, node);
+        }
       }
 
       this.traverse(nodePath);
@@ -648,7 +781,12 @@ export function transformFile(
       const parent = nodePath.parent?.node;
 
       if (isComponentFunction(node, parent)) {
-        componentBlocks.push(node.body);
+        componentBlocks.add(node.body);
+      } else if (isHelperFunction(node, parent)) {
+        if (!isNestedInsideComponent(nodePath)) {
+          const name = getHelperName(node, parent);
+          if (name) helpersNeedingT.set(name, node);
+        }
       }
 
       this.traverse(nodePath);
@@ -659,19 +797,111 @@ export function transformFile(
     return { filePath, modified: false, replacements: 0 };
   }
 
-  // ── Inject const { t } = useTranslation() ────────────────────────────────
+  // ── Determine which helpers actually contain t() calls ────────────────────
+  /**
+   * After replacement, any helper function whose body now contains
+   * a CallExpression with callee name 't' needs `t: TFunction` added
+   * to its signature.
+   *
+   * We check by looking at the body's serialized replacement count —
+   * simpler: we check if any t() call exists in the helper's body AST.
+   */
+  for (const [name, funcNode] of helpersNeedingT.entries()) {
+    if (functionBodyContainsTCall(funcNode.body)) {
+      helperNamesWithT.add(name);
+    }
+  }
+
+  // ── Inject t: TFunction into helper signatures ────────────────────────────
+  for (const name of helperNamesWithT) {
+    const funcNode = helpersNeedingT.get(name);
+    if (!funcNode) continue;
+    if (alreadyHasTParam(funcNode)) continue;
+
+    /**
+     * Add `t: TFunction` as the last parameter.
+     * Last is better than first — it doesn't break existing call signatures
+     * for any positional parameters the function already has.
+     */
+    funcNode.params.push(buildTFunctionParam());
+
+    logger.debug(`  Injected t: TFunction param into helper: ${name}`);
+  }
+
+  // ── Update call sites of helpers that now need t passed in ───────────────
+  /**
+   * Find every call to a helper that now takes `t` as a parameter,
+   * and append `t` as the last argument at each call site.
+   *
+   * We only handle call sites WITHIN THE SAME FILE.
+   * Cross-file call sites are out of scope for v1.
+   *
+   * We do a second traversal specifically for call site patching.
+   * This is cleaner than trying to do it in the first traversal
+   * because we don't know which helpers need patching until the
+   * first traversal + helper analysis is complete.
+   */
+  if (helperNamesWithT.size > 0) {
+    visit(ast, {
+      visitCallExpression(nodePath) {
+        const { callee, arguments: args } = nodePath.node;
+
+        /**
+         * Match simple function calls: getStatusText(status)
+         * We don't match member expression calls (obj.method()) here
+         * since helpers are typically plain functions.
+         */
+        if (callee.type !== "Identifier") return this.traverse(nodePath);
+
+        const calleeName = (callee as any).name;
+        if (!helperNamesWithT.has(calleeName)) return this.traverse(nodePath);
+
+        /**
+         * Check if `t` is already the last argument to avoid
+         * adding it twice if replace is run again on already-patched code.
+         */
+        const lastArg = args[args.length - 1];
+        const alreadyHasT =
+          lastArg?.type === "Identifier" && (lastArg as any).name === "t";
+
+        if (!alreadyHasT) {
+          nodePath.node.arguments.push(b.identifier("t"));
+          logger.debug(`  Added t argument to call site: ${calleeName}()`);
+        }
+
+        this.traverse(nodePath);
+      },
+    });
+  }
+
+  // ── Inject const { t } = useTranslation() into components ────────────────
   for (const block of componentBlocks) {
     if (block?.type === "BlockStatement") {
       injectTDeclaration(block.body);
     }
   }
 
-  // ── Inject import ─────────────────────────────────────────────────────────
-  if (componentBlocks.length > 0) {
-    addUseTranslationImport(ast.program.body);
+  // ── Inject imports ────────────────────────────────────────────────────────
+  /**
+   * Add useTranslation import if any component blocks were found.
+   */
+  if (componentBlocks.size > 0) {
+    addImport(
+      ast.program.body,
+      "react-i18next",
+      "useTranslation",
+      buildUseTranslationImport,
+    );
   }
 
-  // ── Print — only changed nodes are reprinted ──────────────────────────────
+  /**
+   * Add TFunction import if any helpers now receive t as a parameter.
+   * TFunction comes from 'i18next' (not 'react-i18next').
+   */
+  if (helperNamesWithT.size > 0) {
+    addImport(ast.program.body, "i18next", "TFunction", buildTFunctionImport);
+  }
+
   const newCode = recast.print(ast).code;
 
   return {
@@ -683,13 +913,56 @@ export function transformFile(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Project transformer
+// Helper: check if a block statement contains any t() calls
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Transforms all files with translatable strings.
- * Each file is processed independently — no shared state between files.
+ * Returns true if the given block statement body contains at least
+ * one call to `t(...)`.
+ *
+ * Used to determine whether a helper function actually uses t()
+ * after the replacement pass — so we only add `t: TFunction` to
+ * helpers that actually need it.
+ *
+ * We do a simple recursive node walk rather than a full visit()
+ * traversal to keep this lightweight.
  */
+function functionBodyContainsTCall(block: any): boolean {
+  if (!block || block.type !== "BlockStatement") return false;
+  return nodeContainsTCall(block);
+}
+
+function nodeContainsTCall(node: any): boolean {
+  if (!node || typeof node !== "object") return false;
+
+  if (
+    node.type === "CallExpression" &&
+    node.callee?.type === "Identifier" &&
+    node.callee?.name === "t"
+  ) {
+    return true;
+  }
+
+  /**
+   * Recurse into all child nodes.
+   * We iterate over the node's values — arrays and objects are
+   * traversed, primitives (strings, numbers, booleans) are skipped.
+   */
+  for (const value of Object.values(node)) {
+    if (Array.isArray(value)) {
+      if (value.some((child) => nodeContainsTCall(child))) return true;
+    } else if (value && typeof value === "object") {
+      if (nodeContainsTCall(value as any)) return true;
+    }
+  }
+
+  return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Project transformer
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function transformProject(
   appRoot: string,
   strings: ExtractedString[],
