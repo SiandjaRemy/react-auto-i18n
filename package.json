@@ -1,6 +1,6 @@
 {
   "name": "react-auto-i18n",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Automatic i18n scanner and code transformer for React Native apps",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
