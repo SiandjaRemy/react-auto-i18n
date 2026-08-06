@@ -1,8 +1,8 @@
-# rn-auto-i18n
+# react-auto-i18n
 
-Automatic i18n scaffolding and code transformation for React Native apps.
+Automatic i18n scaffolding and code transformation for React apps (Also works for React Native/expo).
 
-`rn-auto-i18n` scans your app's source code, extracts every translatable string, generates locale files, and rewrites your source files to use `t()` calls — all without touching your code until you say so.
+`react-auto-i18n` scans your app's source code, extracts every translatable string, generates locale files, and rewrites your source files to use `t()` calls — all without touching your code until you say so.
 
 ---
 
@@ -27,13 +27,13 @@ rai revert --clean   Delete backups → commit
 ## Installation
 
 ```bash
-npm install -g rn-auto-i18n
+npm install react-auto-i18n
 ```
 
-Or use without installing:
+Or you can install it globaly:
 
 ```bash
-npx rn-auto-i18n init
+npm install -g react-auto-i18n
 ```
 
 ---
@@ -55,7 +55,7 @@ Run this from your project root:
 rai init
 ```
 
-This creates `i18nauto.config.ts` with annotated defaults. Open it and check at minimum:
+This creates `rai.config.ts` with annotated defaults. Open it and check at minimum:
 
 - `defaultLanguage` — the language your app is currently written in
 - `localesDir` — where locale files should be generated (`locales` or `src/locales`)
@@ -108,7 +108,7 @@ git commit -m "feat: replace strings with i18n t() calls"
 
 ### `rai init`
 
-Generates `i18nauto.config.ts` in your project root with defaults and inline documentation.
+Generates `rai.config.ts` in your project root with defaults and inline documentation.
 
 ```bash
 rai init
@@ -240,8 +240,8 @@ rai revert --path ./my-app
 `rai init` generates a fully annotated config file. All fields are optional — missing fields fall back to their defaults.
 
 ```ts
-// i18nauto.config.ts
-import type { I18nautConfig } from 'rn-auto-i18n'
+// rai.config.ts
+import type { I18nautConfig } from 'react-auto-i18n'
 
 export default {
   // The language your app is currently written in

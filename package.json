@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "rai": "./dist/cli.js"
+    "rai": "dist/cli.js"
   },
   "files": [
     "dist"
@@ -34,7 +34,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SiandjaRemy/react-auto-i18n"
+    "url": "git+https://github.com/SiandjaRemy/react-auto-i18n.git"
   },
   "homepage": "https://github.com/SiandjaRemy/react-auto-i18n#readme",
   "bugs": {
