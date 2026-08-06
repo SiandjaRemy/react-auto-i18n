@@ -1,0 +1,8 @@
+src/
+tests/
+*.config.ts
+*.config.js
+.github/
+node_modules/
+*.i18nbak
+.env

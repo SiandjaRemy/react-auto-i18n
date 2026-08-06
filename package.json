@@ -17,17 +17,29 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
+    "react",
     "react-native",
+    "expo",
     "i18n",
     "internationalization",
     "cli",
     "automation",
-    "translation"
+    "translation",
+    "i18next",
+    "react-i18next"
   ],
   "engines": {
     "node": ">=18.0.0"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SiandjaRemy/react-auto-i18n"
+  },
+  "homepage": "https://github.com/SiandjaRemy/react-auto-i18n#readme",
+  "bugs": {
+    "url": "https://github.com/SiandjaRemy/react-auto-i18n/issues"
+  },
   "dependencies": {
     "@babel/generator": "^8.0.0",
     "@babel/parser": "^8.0.4",
