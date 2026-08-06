@@ -7,6 +7,14 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.1.1] — 2026-08-05
+
+### Fixed
+- Updated the package name in the README.md
+
+---
+
+
 ## [0.1.0] — 2026-08-05
 
 ### Initial release
