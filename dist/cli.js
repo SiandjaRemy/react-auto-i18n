@@ -399,7 +399,9 @@ var init_config2 = __esm({
       detectAlerts: true,
       detectThrows: true,
       customDetectCalls: [],
-      exclude: []
+      exclude: [],
+      targetLanguages: [],
+      i18nFilePath: "src/i18n.ts"
     };
   }
 });
@@ -461,7 +463,7 @@ export default {
    * However, its parent directory must already exist.
    * ('src/locales' requires 'src/' to exist \u2014 it usually does in RN projects)
    */
-  localesDir: 'locales',
+  localesDir: 'src/locales',
 
   /**
    * Custom name for the locale file, without the .json extension.
@@ -483,7 +485,7 @@ export default {
    * @example null         \u2192 locales/en.json
    * @example 'translation' \u2192 locales/en/translation.json
    */
-  localeFileName: null,
+  localeFileName: 'translation',
 
   // \u2500\u2500 Key generation \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
@@ -557,6 +559,35 @@ export default {
    */
   exclude: [],
 
+  // \u2500\u2500 Target languages \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+  /**
+   * Languages to generate translation files for, in addition to defaultLanguage.
+   *
+   * Run \`rai locales generate\` after \`rai scan\` to create these files.
+   * Each file starts as a copy of the default language file, ready to
+   * hand off for manual translation (or to paste into an LLM/translator).
+   *
+   * Must be valid ISO 639-1 codes.
+   *
+   * @default []
+   * @example ['fr', 'es', 'de']
+   */
+  targetLanguages: [],
+
+  // \u2500\u2500 i18n entry file \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+  /**
+   * Path to your i18n setup file (the one with \`i18n.use(initReactI18next).init(...)\`).
+   *
+   * \`rai locales generate --with-imports\` edits this file to import and
+   * register newly generated locale files. If the file doesn't exist yet,
+   * import wiring is skipped with a warning.
+   *
+   * @default 'src/i18n.ts'
+   */
+  i18nFilePath: 'src/i18n.ts',
+
 } satisfies Partial<RaiConfig>
 `;
   import_fs2.default.writeFileSync(configPath, configContent, "utf-8");
@@ -568,7 +599,9 @@ export default {
      Key things to check:
        \u2022 "defaultLanguage" \u2014 make sure this matches your app's current language
        \u2022 "localesDir"      \u2014 where locale files will be written
-       \u2022 "localeFileName"      \u2014 custom name for the translation files
+       \u2022 "localeFileName"  \u2014 custom name for the translation files
+       \u2022 "targetLanguages" \u2014 add languages you want to support (e.g. ['fr', 'es', 'de'])
+       \u2022 "i18nFilePath"    \u2014 path to your i18n setup file (default: src/i18n.ts)
        \u2022 "detectAlerts"    \u2014 set to false if you don't use Alert.alert()
        \u2022 "detectThrows"    \u2014 set to false if your errors aren't user-facing
        \u2022 "customDetectCalls" \u2014 add any toast or error handler functions you use
@@ -579,6 +612,17 @@ export default {
 
      This will scan your entire app, extract all translatable strings,
      and generate your locale file at <localesDir>/<defaultLanguage>.json
+
+  3. To generate translation files for target languages:
+       rai locales generate
+
+     This creates copies of the default locale file for each language in targetLanguages.
+     Each file will have the same keys as your default locale, ready for translation.
+
+  4. To automatically wire imports into your i18n file:
+       rai locales generate --with-imports
+
+     This adds import statements and registers the locale files in your i18n setup.
   `);
 }
 var import_path2, import_fs2;
@@ -622,6 +666,17 @@ var init_fs = __esm({
     init_cjs_shims();
     import_fs3 = __toESM(require("fs"));
     import_path3 = __toESM(require("path"));
+  }
+});
+
+// src/utils/normalize.ts
+function normalizeJSXWhitespace(value) {
+  return value.split("\n").map((line) => line.trim()).filter((line) => line.length > 0).join(" ");
+}
+var init_normalize = __esm({
+  "src/utils/normalize.ts"() {
+    "use strict";
+    init_cjs_shims();
   }
 });
 
@@ -839,17 +894,16 @@ function extractStringsFromFile(filePath, appRoot, config) {
     //    JSXText includes all whitespace and newlines between tags,
     //    so we trim and check extractability carefully.
     JSXText(nodePath) {
-      const value = nodePath.node.value;
-      const trimmed = value.trim();
-      if (!isExtractable(trimmed)) return;
-      const { key, fullKey } = buildFullKey(namespace, trimmed, maxKeyLen);
+      const normalized = normalizeJSXWhitespace(nodePath.node.value);
+      if (!isExtractable(normalized)) return;
+      const { key, fullKey } = buildFullKey(namespace, normalized, maxKeyLen);
       results.push({
         filePath,
         namespace,
         key,
         fullKey,
-        originalText: trimmed,
-        translationValue: trimmed,
+        originalText: normalized,
+        translationValue: normalized,
         params: [],
         sourceType: "jsx-text"
       });
@@ -1034,6 +1088,7 @@ var init_scanner = __esm({
     import_path4 = __toESM(require("path"));
     init_fs();
     init_logger();
+    init_normalize();
     TRANSLATABLE_PROP_NAMES = /* @__PURE__ */ new Set([
       "title",
       "message",
@@ -1109,9 +1164,9 @@ async function generateLocaleFile(strings, lang, localesDir, localeFileName) {
 function readLocaleFile(lang, localesDir, localeFileName) {
   const filePath = resolveLocaleFilePath(localesDir, lang, localeFileName);
   try {
-    const fs8 = require("fs");
-    if (!fs8.existsSync(filePath)) return {};
-    return JSON.parse(fs8.readFileSync(filePath, "utf-8"));
+    const fs10 = require("fs");
+    if (!fs10.existsSync(filePath)) return {};
+    return JSON.parse(fs10.readFileSync(filePath, "utf-8"));
   } catch {
     logger.warn(`Could not read locale file: ${filePath}`);
     return {};
@@ -1817,13 +1872,13 @@ function __disposeResources(env) {
   }
   return next();
 }
-function __rewriteRelativeImportExtension(path12, preserveJsx) {
-  if (typeof path12 === "string" && /^\.\.?\//.test(path12)) {
-    return path12.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m, tsx, d, ext, cm) {
+function __rewriteRelativeImportExtension(path15, preserveJsx) {
+  if (typeof path15 === "string" && /^\.\.?\//.test(path15)) {
+    return path15.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m, tsx, d, ext, cm) {
       return tsx ? preserveJsx ? ".jsx" : ".js" : d && (!ext || !cm) ? m : d + ext + "." + cm.toLowerCase() + "js";
     });
   }
-  return path12;
+  return path15;
 }
 var extendStatics, __assign, __createBinding, __setModuleDefault, ownKeys, _SuppressedError, tslib_es6_default;
 var init_tslib_es6 = __esm({
@@ -1925,9 +1980,9 @@ var require_shared = __commonJS({
     var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
     var types_1 = tslib_1.__importDefault(require_types());
     function default_1(fork) {
-      var types = fork.use(types_1.default);
-      var Type = types.Type;
-      var builtin = types.builtInTypes;
+      var types2 = fork.use(types_1.default);
+      var Type = types2.Type;
+      var builtin = types2.builtInTypes;
       var isNumber = builtin.number;
       function geq(than) {
         return Type.from(function(value) {
@@ -2095,9 +2150,9 @@ var require_types = __commonJS({
       /** @class */
       (function(_super) {
         tslib_1.__extends(OrType2, _super);
-        function OrType2(types) {
+        function OrType2(types2) {
           var _this = _super.call(this) || this;
-          _this.types = types;
+          _this.types = types2;
           _this.kind = "OrType";
           return _this;
         }
@@ -2248,11 +2303,11 @@ var require_types = __commonJS({
     function typesPlugin(_fork) {
       var Type = {
         or: function() {
-          var types = [];
+          var types2 = [];
           for (var _i = 0; _i < arguments.length; _i++) {
-            types[_i] = arguments[_i];
+            types2[_i] = arguments[_i];
           }
-          return new OrType(types.map(function(type) {
+          return new OrType(types2.map(function(type) {
             return Type.from(type);
           }));
         },
@@ -2707,9 +2762,9 @@ var require_path = __commonJS({
     var Op = Object.prototype;
     var hasOwn = Op.hasOwnProperty;
     function pathPlugin(fork) {
-      var types = fork.use(types_1.default);
-      var isArray = types.builtInTypes.array;
-      var isNumber = types.builtInTypes.number;
+      var types2 = fork.use(types_1.default);
+      var isArray = types2.builtInTypes.array;
+      var isNumber = types2.builtInTypes.number;
       var Path = function Path2(value, parentPath, name) {
         if (!(this instanceof Path2)) {
           throw new Error("Path constructor cannot be invoked without 'new'");
@@ -2728,16 +2783,16 @@ var require_path = __commonJS({
         this.__childCache = null;
       };
       var Pp = Path.prototype;
-      function getChildCache(path12) {
-        return path12.__childCache || (path12.__childCache = /* @__PURE__ */ Object.create(null));
+      function getChildCache(path15) {
+        return path15.__childCache || (path15.__childCache = /* @__PURE__ */ Object.create(null));
       }
-      function getChildPath(path12, name) {
-        var cache = getChildCache(path12);
-        var actualChildValue = path12.getValueProperty(name);
+      function getChildPath(path15, name) {
+        var cache = getChildCache(path15);
+        var actualChildValue = path15.getValueProperty(name);
         var childPath = cache[name];
         if (!hasOwn.call(cache, name) || // Ensure consistency between cache and reality.
         childPath.value !== actualChildValue) {
-          childPath = cache[name] = new path12.constructor(actualChildValue, path12, name);
+          childPath = cache[name] = new path15.constructor(actualChildValue, path15, name);
         }
         return childPath;
       }
@@ -2749,12 +2804,12 @@ var require_path = __commonJS({
         for (var _i = 0; _i < arguments.length; _i++) {
           names[_i] = arguments[_i];
         }
-        var path12 = this;
+        var path15 = this;
         var count = names.length;
         for (var i = 0; i < count; ++i) {
-          path12 = getChildPath(path12, names[i]);
+          path15 = getChildPath(path15, names[i]);
         }
-        return path12;
+        return path15;
       };
       Pp.each = function each(callback, context) {
         var childPaths = [];
@@ -2790,12 +2845,12 @@ var require_path = __commonJS({
       };
       function emptyMoves() {
       }
-      function getMoves(path12, offset, start, end) {
-        isArray.assert(path12.value);
+      function getMoves(path15, offset, start, end) {
+        isArray.assert(path15.value);
         if (offset === 0) {
           return emptyMoves;
         }
-        var length = path12.value.length;
+        var length = path15.value.length;
         if (length < 1) {
           return emptyMoves;
         }
@@ -2813,10 +2868,10 @@ var require_path = __commonJS({
         isNumber.assert(start);
         isNumber.assert(end);
         var moves = /* @__PURE__ */ Object.create(null);
-        var cache = getChildCache(path12);
+        var cache = getChildCache(path15);
         for (var i = start; i < end; ++i) {
-          if (hasOwn.call(path12.value, i)) {
-            var childPath = path12.get(i);
+          if (hasOwn.call(path15.value, i)) {
+            var childPath = path15.get(i);
             if (childPath.name !== i) {
               throw new Error("");
             }
@@ -2834,7 +2889,7 @@ var require_path = __commonJS({
               throw new Error("");
             }
             cache[newIndex2] = childPath2;
-            path12.value[newIndex2] = childPath2.value;
+            path15.value[newIndex2] = childPath2.value;
           }
         };
       }
@@ -2909,34 +2964,34 @@ var require_path = __commonJS({
         }
         return pp.insertAt.apply(pp, insertAtArgs);
       };
-      function repairRelationshipWithParent(path12) {
-        if (!(path12 instanceof Path)) {
+      function repairRelationshipWithParent(path15) {
+        if (!(path15 instanceof Path)) {
           throw new Error("");
         }
-        var pp = path12.parentPath;
+        var pp = path15.parentPath;
         if (!pp) {
-          return path12;
+          return path15;
         }
         var parentValue = pp.value;
         var parentCache = getChildCache(pp);
-        if (parentValue[path12.name] === path12.value) {
-          parentCache[path12.name] = path12;
+        if (parentValue[path15.name] === path15.value) {
+          parentCache[path15.name] = path15;
         } else if (isArray.check(parentValue)) {
-          var i = parentValue.indexOf(path12.value);
+          var i = parentValue.indexOf(path15.value);
           if (i >= 0) {
-            parentCache[path12.name = i] = path12;
+            parentCache[path15.name = i] = path15;
           }
         } else {
-          parentValue[path12.name] = path12.value;
-          parentCache[path12.name] = path12;
+          parentValue[path15.name] = path15.value;
+          parentCache[path15.name] = path15;
         }
-        if (parentValue[path12.name] !== path12.value) {
+        if (parentValue[path15.name] !== path15.value) {
           throw new Error("");
         }
-        if (path12.parentPath.get(path12.name) !== path12) {
+        if (path15.parentPath.get(path15.name) !== path15) {
           throw new Error("");
         }
-        return path12;
+        return path15;
       }
       Pp.replace = function replace2(replacement) {
         var results = [];
@@ -3013,19 +3068,19 @@ var require_scope = __commonJS({
     var types_1 = tslib_1.__importDefault(require_types());
     var hasOwn = Object.prototype.hasOwnProperty;
     function scopePlugin(fork) {
-      var types = fork.use(types_1.default);
-      var Type = types.Type;
-      var namedTypes = types.namedTypes;
+      var types2 = fork.use(types_1.default);
+      var Type = types2.Type;
+      var namedTypes = types2.namedTypes;
       var Node = namedTypes.Node;
       var Expression = namedTypes.Expression;
-      var isArray = types.builtInTypes.array;
-      var b2 = types.builders;
-      var Scope = function Scope2(path12, parentScope) {
+      var isArray = types2.builtInTypes.array;
+      var b2 = types2.builders;
+      var Scope = function Scope2(path15, parentScope) {
         if (!(this instanceof Scope2)) {
           throw new Error("Scope constructor cannot be invoked without 'new'");
         }
-        if (!TypeParameterScopeType.check(path12.value)) {
-          ScopeType.assert(path12.value);
+        if (!TypeParameterScopeType.check(path15.value)) {
+          ScopeType.assert(path15.value);
         }
         var depth;
         if (parentScope) {
@@ -3038,8 +3093,8 @@ var require_scope = __commonJS({
           depth = 0;
         }
         Object.defineProperties(this, {
-          path: { value: path12 },
-          node: { value: path12.value },
+          path: { value: path15 },
+          node: { value: path15.value },
           isGlobal: { value: !parentScope, enumerable: true },
           depth: { value: depth },
           parent: { value: parentScope },
@@ -3087,7 +3142,7 @@ var require_scope = __commonJS({
           ++index;
         }
         var name = prefix + index;
-        return this.bindings[name] = types.builders.identifier(name);
+        return this.bindings[name] = types2.builders.identifier(name);
       };
       Sp.injectTemporary = function(identifier, init2) {
         identifier || (identifier = this.declareTemporary());
@@ -3118,10 +3173,10 @@ var require_scope = __commonJS({
         this.scan();
         return this.types;
       };
-      function scanScope(path12, bindings, scopeTypes) {
-        var node = path12.value;
+      function scanScope(path15, bindings, scopeTypes) {
+        var node = path15.value;
         if (TypeParameterScopeType.check(node)) {
-          var params = path12.get("typeParameters", "params");
+          var params = path15.get("typeParameters", "params");
           if (isArray.check(params.value)) {
             params.each(function(childPath) {
               addTypeParameter(childPath, scopeTypes);
@@ -3130,45 +3185,45 @@ var require_scope = __commonJS({
         }
         if (ScopeType.check(node)) {
           if (namedTypes.CatchClause.check(node)) {
-            addPattern(path12.get("param"), bindings);
+            addPattern(path15.get("param"), bindings);
           } else {
-            recursiveScanScope(path12, bindings, scopeTypes);
+            recursiveScanScope(path15, bindings, scopeTypes);
           }
         }
       }
-      function recursiveScanScope(path12, bindings, scopeTypes) {
-        var node = path12.value;
-        if (path12.parent && namedTypes.FunctionExpression.check(path12.parent.node) && path12.parent.node.id) {
-          addPattern(path12.parent.get("id"), bindings);
+      function recursiveScanScope(path15, bindings, scopeTypes) {
+        var node = path15.value;
+        if (path15.parent && namedTypes.FunctionExpression.check(path15.parent.node) && path15.parent.node.id) {
+          addPattern(path15.parent.get("id"), bindings);
         }
         if (!node) {
         } else if (isArray.check(node)) {
-          path12.each(function(childPath) {
+          path15.each(function(childPath) {
             recursiveScanChild(childPath, bindings, scopeTypes);
           });
         } else if (namedTypes.Function.check(node)) {
-          path12.get("params").each(function(paramPath) {
+          path15.get("params").each(function(paramPath) {
             addPattern(paramPath, bindings);
           });
-          recursiveScanChild(path12.get("body"), bindings, scopeTypes);
-          recursiveScanScope(path12.get("typeParameters"), bindings, scopeTypes);
+          recursiveScanChild(path15.get("body"), bindings, scopeTypes);
+          recursiveScanScope(path15.get("typeParameters"), bindings, scopeTypes);
         } else if (namedTypes.TypeAlias && namedTypes.TypeAlias.check(node) || namedTypes.InterfaceDeclaration && namedTypes.InterfaceDeclaration.check(node) || namedTypes.TSTypeAliasDeclaration && namedTypes.TSTypeAliasDeclaration.check(node) || namedTypes.TSInterfaceDeclaration && namedTypes.TSInterfaceDeclaration.check(node)) {
-          addTypePattern(path12.get("id"), scopeTypes);
+          addTypePattern(path15.get("id"), scopeTypes);
         } else if (namedTypes.VariableDeclarator.check(node)) {
-          addPattern(path12.get("id"), bindings);
-          recursiveScanChild(path12.get("init"), bindings, scopeTypes);
+          addPattern(path15.get("id"), bindings);
+          recursiveScanChild(path15.get("init"), bindings, scopeTypes);
         } else if (node.type === "ImportSpecifier" || node.type === "ImportNamespaceSpecifier" || node.type === "ImportDefaultSpecifier") {
           addPattern(
             // Esprima used to use the .name field to refer to the local
             // binding identifier for ImportSpecifier nodes, but .id for
             // ImportNamespaceSpecifier and ImportDefaultSpecifier nodes.
             // ESTree/Acorn/ESpree use .local for all three node types.
-            path12.get(node.local ? "local" : node.name ? "name" : "id"),
+            path15.get(node.local ? "local" : node.name ? "name" : "id"),
             bindings
           );
         } else if (Node.check(node) && !Expression.check(node)) {
-          types.eachField(node, function(name, child) {
-            var childPath = path12.get(name);
+          types2.eachField(node, function(name, child) {
+            var childPath = path15.get(name);
             if (!pathHasValue(childPath, child)) {
               throw new Error("");
             }
@@ -3176,37 +3231,37 @@ var require_scope = __commonJS({
           });
         }
       }
-      function pathHasValue(path12, value) {
-        if (path12.value === value) {
+      function pathHasValue(path15, value) {
+        if (path15.value === value) {
           return true;
         }
-        if (Array.isArray(path12.value) && path12.value.length === 0 && Array.isArray(value) && value.length === 0) {
+        if (Array.isArray(path15.value) && path15.value.length === 0 && Array.isArray(value) && value.length === 0) {
           return true;
         }
         return false;
       }
-      function recursiveScanChild(path12, bindings, scopeTypes) {
-        var node = path12.value;
+      function recursiveScanChild(path15, bindings, scopeTypes) {
+        var node = path15.value;
         if (!node || Expression.check(node)) {
         } else if (namedTypes.FunctionDeclaration.check(node) && node.id !== null) {
-          addPattern(path12.get("id"), bindings);
+          addPattern(path15.get("id"), bindings);
         } else if (namedTypes.ClassDeclaration && namedTypes.ClassDeclaration.check(node) && node.id !== null) {
-          addPattern(path12.get("id"), bindings);
-          recursiveScanScope(path12.get("typeParameters"), bindings, scopeTypes);
+          addPattern(path15.get("id"), bindings);
+          recursiveScanScope(path15.get("typeParameters"), bindings, scopeTypes);
         } else if (namedTypes.InterfaceDeclaration && namedTypes.InterfaceDeclaration.check(node) || namedTypes.TSInterfaceDeclaration && namedTypes.TSInterfaceDeclaration.check(node)) {
-          addTypePattern(path12.get("id"), scopeTypes);
+          addTypePattern(path15.get("id"), scopeTypes);
         } else if (ScopeType.check(node)) {
           if (namedTypes.CatchClause.check(node) && // TODO Broaden this to accept any pattern.
           namedTypes.Identifier.check(node.param)) {
             var catchParamName = node.param.name;
             var hadBinding = hasOwn.call(bindings, catchParamName);
-            recursiveScanScope(path12.get("body"), bindings, scopeTypes);
+            recursiveScanScope(path15.get("body"), bindings, scopeTypes);
             if (!hadBinding) {
               delete bindings[catchParamName];
             }
           }
         } else {
-          recursiveScanScope(path12, bindings, scopeTypes);
+          recursiveScanScope(path15, bindings, scopeTypes);
         }
       }
       function addPattern(patternPath, bindings) {
@@ -3246,24 +3301,24 @@ var require_scope = __commonJS({
           addPattern(patternPath.get("argument"), bindings);
         }
       }
-      function addTypePattern(patternPath, types2) {
+      function addTypePattern(patternPath, types3) {
         var pattern = patternPath.value;
         namedTypes.Pattern.assert(pattern);
         if (namedTypes.Identifier.check(pattern)) {
-          if (hasOwn.call(types2, pattern.name)) {
-            types2[pattern.name].push(patternPath);
+          if (hasOwn.call(types3, pattern.name)) {
+            types3[pattern.name].push(patternPath);
           } else {
-            types2[pattern.name] = [patternPath];
+            types3[pattern.name] = [patternPath];
           }
         }
       }
-      function addTypeParameter(parameterPath, types2) {
+      function addTypeParameter(parameterPath, types3) {
         var parameter = parameterPath.value;
         FlowOrTSTypeParameterType.assert(parameter);
-        if (hasOwn.call(types2, parameter.name)) {
-          types2[parameter.name].push(parameterPath);
+        if (hasOwn.call(types3, parameter.name)) {
+          types3[parameter.name].push(parameterPath);
         } else {
-          types2[parameter.name] = [parameterPath];
+          types3[parameter.name] = [parameterPath];
         }
       }
       Sp.lookup = function(name) {
@@ -3305,11 +3360,11 @@ var require_node_path = __commonJS({
     var scope_1 = tslib_1.__importDefault(require_scope());
     var shared_1 = require_shared();
     function nodePathPlugin(fork) {
-      var types = fork.use(types_1.default);
-      var n = types.namedTypes;
-      var b2 = types.builders;
-      var isNumber = types.builtInTypes.number;
-      var isArray = types.builtInTypes.array;
+      var types2 = fork.use(types_1.default);
+      var n = types2.namedTypes;
+      var b2 = types2.builders;
+      var isNumber = types2.builtInTypes.number;
+      var isArray = types2.builtInTypes.array;
       var Path = fork.use(path_1.default);
       var Scope = fork.use(scope_1.default);
       var NodePath = function NodePath2(value, parentPath, name) {
@@ -3400,7 +3455,7 @@ var require_node_path = __commonJS({
         return scope || null;
       };
       NPp.getValueProperty = function(name) {
-        return types.getFieldValue(this.value, name);
+        return types2.getFieldValue(this.value, name);
       };
       NPp.needsParens = function(assumeExpressionContext) {
         var pp = this.parentPath;
@@ -3542,7 +3597,7 @@ var require_node_path = __commonJS({
           return node.some(containsCallExpression);
         }
         if (n.Node.check(node)) {
-          return types.someField(node, function(_name, child) {
+          return types2.someField(node, function(_name, child) {
             return containsCallExpression(child);
           });
         }
@@ -3555,53 +3610,53 @@ var require_node_path = __commonJS({
       NPp.firstInStatement = function() {
         return firstInStatement(this);
       };
-      function firstInStatement(path12) {
-        for (var node, parent; path12.parent; path12 = path12.parent) {
-          node = path12.node;
-          parent = path12.parent.node;
-          if (n.BlockStatement.check(parent) && path12.parent.name === "body" && path12.name === 0) {
+      function firstInStatement(path15) {
+        for (var node, parent; path15.parent; path15 = path15.parent) {
+          node = path15.node;
+          parent = path15.parent.node;
+          if (n.BlockStatement.check(parent) && path15.parent.name === "body" && path15.name === 0) {
             if (parent.body[0] !== node) {
               throw new Error("Nodes must be equal");
             }
             return true;
           }
-          if (n.ExpressionStatement.check(parent) && path12.name === "expression") {
+          if (n.ExpressionStatement.check(parent) && path15.name === "expression") {
             if (parent.expression !== node) {
               throw new Error("Nodes must be equal");
             }
             return true;
           }
-          if (n.SequenceExpression.check(parent) && path12.parent.name === "expressions" && path12.name === 0) {
+          if (n.SequenceExpression.check(parent) && path15.parent.name === "expressions" && path15.name === 0) {
             if (parent.expressions[0] !== node) {
               throw new Error("Nodes must be equal");
             }
             continue;
           }
-          if (n.CallExpression.check(parent) && path12.name === "callee") {
+          if (n.CallExpression.check(parent) && path15.name === "callee") {
             if (parent.callee !== node) {
               throw new Error("Nodes must be equal");
             }
             continue;
           }
-          if (n.MemberExpression.check(parent) && path12.name === "object") {
+          if (n.MemberExpression.check(parent) && path15.name === "object") {
             if (parent.object !== node) {
               throw new Error("Nodes must be equal");
             }
             continue;
           }
-          if (n.ConditionalExpression.check(parent) && path12.name === "test") {
+          if (n.ConditionalExpression.check(parent) && path15.name === "test") {
             if (parent.test !== node) {
               throw new Error("Nodes must be equal");
             }
             continue;
           }
-          if (isBinary(parent) && path12.name === "left") {
+          if (isBinary(parent) && path15.name === "left") {
             if (parent.left !== node) {
               throw new Error("Nodes must be equal");
             }
             continue;
           }
-          if (n.UnaryExpression.check(parent) && !parent.prefix && path12.name === "argument") {
+          if (n.UnaryExpression.check(parent) && !parent.prefix && path15.name === "argument") {
             if (parent.argument !== node) {
               throw new Error("Nodes must be equal");
             }
@@ -3664,11 +3719,11 @@ var require_path_visitor = __commonJS({
     var shared_1 = require_shared();
     var hasOwn = Object.prototype.hasOwnProperty;
     function pathVisitorPlugin(fork) {
-      var types = fork.use(types_1.default);
+      var types2 = fork.use(types_1.default);
       var NodePath = fork.use(node_path_1.default);
-      var isArray = types.builtInTypes.array;
-      var isObject = types.builtInTypes.object;
-      var isFunction = types.builtInTypes.function;
+      var isArray = types2.builtInTypes.array;
+      var isObject = types2.builtInTypes.object;
+      var isFunction = types2.builtInTypes.function;
       var undefined2;
       var PathVisitor = function PathVisitor2() {
         if (!(this instanceof PathVisitor2)) {
@@ -3688,7 +3743,7 @@ var require_path_visitor = __commonJS({
             typeNames[methodName.slice("visit".length)] = true;
           }
         }
-        var supertypeTable = types.computeSupertypeLookupTable(typeNames);
+        var supertypeTable = types2.computeSupertypeLookupTable(typeNames);
         var methodNameTable = /* @__PURE__ */ Object.create(null);
         var typeNameKeys = Object.keys(supertypeTable);
         var typeNameCount = typeNameKeys.length;
@@ -3730,7 +3785,7 @@ var require_path_visitor = __commonJS({
         }
         return target;
       }
-      PathVisitor.visit = function visit2(node, methods) {
+      PathVisitor.visit = function visit3(node, methods) {
         return PathVisitor.fromMethodsObject(methods).visit(node);
       };
       var PVp = PathVisitor.prototype;
@@ -3775,39 +3830,39 @@ var require_path_visitor = __commonJS({
       };
       PVp.reset = function(_path) {
       };
-      PVp.visitWithoutReset = function(path12) {
+      PVp.visitWithoutReset = function(path15) {
         if (this instanceof this.Context) {
-          return this.visitor.visitWithoutReset(path12);
+          return this.visitor.visitWithoutReset(path15);
         }
-        if (!(path12 instanceof NodePath)) {
+        if (!(path15 instanceof NodePath)) {
           throw new Error("");
         }
-        var value = path12.value;
+        var value = path15.value;
         var methodName = value && typeof value === "object" && typeof value.type === "string" && this._methodNameTable[value.type];
         if (methodName) {
-          var context = this.acquireContext(path12);
+          var context = this.acquireContext(path15);
           try {
             return context.invokeVisitorMethod(methodName);
           } finally {
             this.releaseContext(context);
           }
         } else {
-          return visitChildren(path12, this);
+          return visitChildren(path15, this);
         }
       };
-      function visitChildren(path12, visitor) {
-        if (!(path12 instanceof NodePath)) {
+      function visitChildren(path15, visitor) {
+        if (!(path15 instanceof NodePath)) {
           throw new Error("");
         }
         if (!(visitor instanceof PathVisitor)) {
           throw new Error("");
         }
-        var value = path12.value;
+        var value = path15.value;
         if (isArray.check(value)) {
-          path12.each(visitor.visitWithoutReset, visitor);
+          path15.each(visitor.visitWithoutReset, visitor);
         } else if (!isObject.check(value)) {
         } else {
-          var childNames = types.getFieldNames(value);
+          var childNames = types2.getFieldNames(value);
           if (visitor._shouldVisitComments && value.comments && childNames.indexOf("comments") < 0) {
             childNames.push("comments");
           }
@@ -3816,21 +3871,21 @@ var require_path_visitor = __commonJS({
           for (var i = 0; i < childCount; ++i) {
             var childName = childNames[i];
             if (!hasOwn.call(value, childName)) {
-              value[childName] = types.getFieldValue(value, childName);
+              value[childName] = types2.getFieldValue(value, childName);
             }
-            childPaths.push(path12.get(childName));
+            childPaths.push(path15.get(childName));
           }
           for (var i = 0; i < childCount; ++i) {
             visitor.visitWithoutReset(childPaths[i]);
           }
         }
-        return path12.value;
+        return path15.value;
       }
-      PVp.acquireContext = function(path12) {
+      PVp.acquireContext = function(path15) {
         if (this._reusableContextStack.length === 0) {
-          return new this.Context(path12);
+          return new this.Context(path15);
         }
-        return this._reusableContextStack.pop().reset(path12);
+        return this._reusableContextStack.pop().reset(path15);
       };
       PVp.releaseContext = function(context) {
         if (!(context instanceof this.Context)) {
@@ -3846,14 +3901,14 @@ var require_path_visitor = __commonJS({
         return this._changeReported;
       };
       function makeContextConstructor(visitor) {
-        function Context(path12) {
+        function Context(path15) {
           if (!(this instanceof Context)) {
             throw new Error("");
           }
           if (!(this instanceof PathVisitor)) {
             throw new Error("");
           }
-          if (!(path12 instanceof NodePath)) {
+          if (!(path15 instanceof NodePath)) {
             throw new Error("");
           }
           Object.defineProperty(this, "visitor", {
@@ -3862,7 +3917,7 @@ var require_path_visitor = __commonJS({
             enumerable: true,
             configurable: false
           });
-          this.currentPath = path12;
+          this.currentPath = path15;
           this.needToCallTraverse = true;
           Object.seal(this);
         }
@@ -3875,14 +3930,14 @@ var require_path_visitor = __commonJS({
         return Context;
       }
       var sharedContextProtoMethods = /* @__PURE__ */ Object.create(null);
-      sharedContextProtoMethods.reset = function reset(path12) {
+      sharedContextProtoMethods.reset = function reset(path15) {
         if (!(this instanceof this.Context)) {
           throw new Error("");
         }
-        if (!(path12 instanceof NodePath)) {
+        if (!(path15 instanceof NodePath)) {
           throw new Error("");
         }
-        this.currentPath = path12;
+        this.currentPath = path15;
         this.needToCallTraverse = true;
         return this;
       };
@@ -3905,34 +3960,34 @@ var require_path_visitor = __commonJS({
         if (this.needToCallTraverse !== false) {
           throw new Error("Must either call this.traverse or return false in " + methodName);
         }
-        var path12 = this.currentPath;
-        return path12 && path12.value;
+        var path15 = this.currentPath;
+        return path15 && path15.value;
       };
-      sharedContextProtoMethods.traverse = function traverse2(path12, newVisitor) {
+      sharedContextProtoMethods.traverse = function traverse2(path15, newVisitor) {
         if (!(this instanceof this.Context)) {
           throw new Error("");
         }
-        if (!(path12 instanceof NodePath)) {
+        if (!(path15 instanceof NodePath)) {
           throw new Error("");
         }
         if (!(this.currentPath instanceof NodePath)) {
           throw new Error("");
         }
         this.needToCallTraverse = false;
-        return visitChildren(path12, PathVisitor.fromMethodsObject(newVisitor || this.visitor));
+        return visitChildren(path15, PathVisitor.fromMethodsObject(newVisitor || this.visitor));
       };
-      sharedContextProtoMethods.visit = function visit2(path12, newVisitor) {
+      sharedContextProtoMethods.visit = function visit3(path15, newVisitor) {
         if (!(this instanceof this.Context)) {
           throw new Error("");
         }
-        if (!(path12 instanceof NodePath)) {
+        if (!(path15 instanceof NodePath)) {
           throw new Error("");
         }
         if (!(this.currentPath instanceof NodePath)) {
           throw new Error("");
         }
         this.needToCallTraverse = false;
-        return PathVisitor.fromMethodsObject(newVisitor || this.visitor).visitWithoutReset(path12);
+        return PathVisitor.fromMethodsObject(newVisitor || this.visitor).visitWithoutReset(path15);
       };
       sharedContextProtoMethods.reportChanged = function reportChanged() {
         this.visitor.reportChanged();
@@ -3960,13 +4015,13 @@ var require_equiv = __commonJS({
     var shared_1 = require_shared();
     var types_1 = tslib_1.__importDefault(require_types());
     function default_1(fork) {
-      var types = fork.use(types_1.default);
-      var getFieldNames = types.getFieldNames;
-      var getFieldValue = types.getFieldValue;
-      var isArray = types.builtInTypes.array;
-      var isObject = types.builtInTypes.object;
-      var isDate = types.builtInTypes.Date;
-      var isRegExp = types.builtInTypes.RegExp;
+      var types2 = fork.use(types_1.default);
+      var getFieldNames = types2.getFieldNames;
+      var getFieldValue = types2.getFieldValue;
+      var isArray = types2.builtInTypes.array;
+      var isObject = types2.builtInTypes.object;
+      var isDate = types2.builtInTypes.Date;
+      var isRegExp = types2.builtInTypes.RegExp;
       var hasOwn = Object.prototype.hasOwnProperty;
       function astNodesAreEquivalent(a, b2, problemPath) {
         if (isArray.check(problemPath)) {
@@ -4120,24 +4175,24 @@ var require_fork = __commonJS({
     var shared_1 = require_shared();
     function default_1(plugins) {
       var fork = createFork();
-      var types = fork.use(types_1.default);
+      var types2 = fork.use(types_1.default);
       plugins.forEach(fork.use);
-      types.finalize();
+      types2.finalize();
       var PathVisitor = fork.use(path_visitor_1.default);
       return {
-        Type: types.Type,
-        builtInTypes: types.builtInTypes,
-        namedTypes: types.namedTypes,
-        builders: types.builders,
-        defineMethod: types.defineMethod,
-        getFieldNames: types.getFieldNames,
-        getFieldValue: types.getFieldValue,
-        eachField: types.eachField,
-        someField: types.someField,
-        getSupertypeNames: types.getSupertypeNames,
-        getBuilderName: types.getBuilderName,
+        Type: types2.Type,
+        builtInTypes: types2.builtInTypes,
+        namedTypes: types2.namedTypes,
+        builders: types2.builders,
+        defineMethod: types2.defineMethod,
+        getFieldNames: types2.getFieldNames,
+        getFieldValue: types2.getFieldValue,
+        eachField: types2.eachField,
+        someField: types2.someField,
+        getSupertypeNames: types2.getSupertypeNames,
+        getBuilderName: types2.getBuilderName,
         astNodesAreEquivalent: fork.use(equiv_1.default),
-        finalize: types.finalize,
+        finalize: types2.finalize,
         Path: fork.use(path_1.default),
         NodePath: fork.use(node_path_1.default),
         PathVisitor,
@@ -4312,8 +4367,8 @@ var require_core2 = __commonJS({
     var types_1 = tslib_1.__importDefault(require_types());
     var shared_1 = tslib_1.__importStar(require_shared());
     function default_1(fork) {
-      var types = fork.use(types_1.default);
-      var Type = types.Type;
+      var types2 = fork.use(types_1.default);
+      var Type = types2.Type;
       var def = Type.def;
       var or = Type.or;
       var shared = fork.use(shared_1.default);
@@ -4406,9 +4461,9 @@ var require_es6 = __commonJS({
     var shared_1 = tslib_1.__importStar(require_shared());
     function default_1(fork) {
       fork.use(core_1.default);
-      var types = fork.use(types_1.default);
-      var def = types.Type.def;
-      var or = types.Type.or;
+      var types2 = fork.use(types_1.default);
+      var def = types2.Type.def;
+      var or = types2.Type.or;
       var defaults = fork.use(shared_1.default).defaults;
       def("Function").field("generator", Boolean, defaults["false"]).field("expression", Boolean, defaults["false"]).field("defaults", [or(def("Expression"), null)], defaults.emptyArray).field("rest", or(def("Identifier"), null), defaults["null"]);
       def("RestElement").bases("Pattern").build("argument").field("argument", def("Pattern")).field(
@@ -4501,8 +4556,8 @@ var require_es2017 = __commonJS({
     var shared_1 = tslib_1.__importStar(require_shared());
     function default_1(fork) {
       fork.use(es2016_1.default);
-      var types = fork.use(types_1.default);
-      var def = types.Type.def;
+      var types2 = fork.use(types_1.default);
+      var def = types2.Type.def;
       var defaults = fork.use(shared_1.default).defaults;
       def("Function").field("async", Boolean, defaults["false"]);
       def("AwaitExpression").bases("Expression").build("argument").field("argument", def("Expression"));
@@ -4526,9 +4581,9 @@ var require_es2018 = __commonJS({
     var shared_1 = tslib_1.__importStar(require_shared());
     function default_1(fork) {
       fork.use(es2017_1.default);
-      var types = fork.use(types_1.default);
-      var def = types.Type.def;
-      var or = types.Type.or;
+      var types2 = fork.use(types_1.default);
+      var def = types2.Type.def;
+      var or = types2.Type.or;
       var defaults = fork.use(shared_1.default).defaults;
       def("ForOfStatement").field("await", Boolean, defaults["false"]);
       def("SpreadProperty").bases("Node").build("argument").field("argument", def("Expression"));
@@ -4561,9 +4616,9 @@ var require_es2019 = __commonJS({
     var shared_1 = tslib_1.__importStar(require_shared());
     function default_1(fork) {
       fork.use(es2018_1.default);
-      var types = fork.use(types_1.default);
-      var def = types.Type.def;
-      var or = types.Type.or;
+      var types2 = fork.use(types_1.default);
+      var def = types2.Type.def;
+      var or = types2.Type.or;
       var defaults = fork.use(shared_1.default).defaults;
       def("CatchClause").field("param", or(def("Pattern"), null), defaults["null"]);
     }
@@ -4588,9 +4643,9 @@ var require_es20202 = __commonJS({
     function default_1(fork) {
       fork.use(es2020_1.default);
       fork.use(es2019_1.default);
-      var types = fork.use(types_1.default);
-      var def = types.Type.def;
-      var or = types.Type.or;
+      var types2 = fork.use(types_1.default);
+      var def = types2.Type.def;
+      var or = types2.Type.or;
       var shared = fork.use(shared_1.default);
       var defaults = shared.defaults;
       def("ImportExpression").bases("Expression").build("source").field("source", def("Expression"));
@@ -4642,8 +4697,8 @@ var require_es2022 = __commonJS({
     var shared_1 = require_shared();
     function default_1(fork) {
       fork.use(es2021_1.default);
-      var types = fork.use(types_1.default);
-      var def = types.Type.def;
+      var types2 = fork.use(types_1.default);
+      var def = types2.Type.def;
       def("StaticBlock").bases("Declaration").build("body").field("body", [def("Statement")]);
     }
     exports2.default = default_1;
@@ -4665,9 +4720,9 @@ var require_es_proposals = __commonJS({
     var es2022_1 = tslib_1.__importDefault(require_es2022());
     function default_1(fork) {
       fork.use(es2022_1.default);
-      var types = fork.use(types_1.default);
-      var Type = types.Type;
-      var def = types.Type.def;
+      var types2 = fork.use(types_1.default);
+      var Type = types2.Type;
+      var def = types2.Type.def;
       var or = Type.or;
       var shared = fork.use(shared_1.default);
       var defaults = shared.defaults;
@@ -4708,9 +4763,9 @@ var require_jsx = __commonJS({
     var shared_1 = tslib_1.__importStar(require_shared());
     function default_1(fork) {
       fork.use(es_proposals_1.default);
-      var types = fork.use(types_1.default);
-      var def = types.Type.def;
-      var or = types.Type.or;
+      var types2 = fork.use(types_1.default);
+      var def = types2.Type.def;
+      var or = types2.Type.or;
       var defaults = fork.use(shared_1.default).defaults;
       def("JSXAttribute").bases("Node").build("name", "value").field("name", or(def("JSXIdentifier"), def("JSXNamespacedName"))).field("value", or(
         def("Literal"),
@@ -4775,9 +4830,9 @@ var require_type_annotations = __commonJS({
     var types_1 = tslib_1.__importDefault(require_types());
     var shared_1 = tslib_1.__importStar(require_shared());
     function default_1(fork) {
-      var types = fork.use(types_1.default);
-      var def = types.Type.def;
-      var or = types.Type.or;
+      var types2 = fork.use(types_1.default);
+      var def = types2.Type.def;
+      var or = types2.Type.or;
       var defaults = fork.use(shared_1.default).defaults;
       var TypeAnnotation = or(def("TypeAnnotation"), def("TSTypeAnnotation"), null);
       var TypeParamDecl = or(def("TypeParameterDeclaration"), def("TSTypeParameterDeclaration"), null);
@@ -4813,9 +4868,9 @@ var require_flow = __commonJS({
     function default_1(fork) {
       fork.use(es_proposals_1.default);
       fork.use(type_annotations_1.default);
-      var types = fork.use(types_1.default);
-      var def = types.Type.def;
-      var or = types.Type.or;
+      var types2 = fork.use(types_1.default);
+      var def = types2.Type.def;
+      var or = types2.Type.or;
       var defaults = fork.use(shared_1.default).defaults;
       def("Flow").bases("Node");
       def("FlowType").bases("Flow");
@@ -4933,10 +4988,10 @@ var require_esprima = __commonJS({
     var shared_1 = tslib_1.__importStar(require_shared());
     function default_1(fork) {
       fork.use(es_proposals_1.default);
-      var types = fork.use(types_1.default);
+      var types2 = fork.use(types_1.default);
       var defaults = fork.use(shared_1.default).defaults;
-      var def = types.Type.def;
-      var or = types.Type.or;
+      var def = types2.Type.def;
+      var or = types2.Type.or;
       def("VariableDeclaration").field("declarations", [or(
         def("VariableDeclarator"),
         def("Identifier")
@@ -4996,11 +5051,11 @@ var require_babel_core = __commonJS({
     function default_1(fork) {
       var _a, _b, _c, _d, _e;
       fork.use(es_proposals_1.default);
-      var types = fork.use(types_1.default);
+      var types2 = fork.use(types_1.default);
       var defaults = fork.use(shared_1.default).defaults;
-      var def = types.Type.def;
-      var or = types.Type.or;
-      var isUndefined = types.builtInTypes.undefined;
+      var def = types2.Type.def;
+      var or = types2.Type.or;
+      var isUndefined = types2.builtInTypes.undefined;
       def("Noop").bases("Statement").build();
       def("DoExpression").bases("Expression").build("body").field("body", [def("Statement")]);
       def("BindExpression").bases("Expression").build("object", "callee").field("object", or(def("Expression"), null)).field("callee", def("Expression"));
@@ -5035,7 +5090,7 @@ var require_babel_core = __commonJS({
             raw: String
           },
           function getDefault() {
-            var value = types.getFieldValue(this, "value");
+            var value = types2.getFieldValue(this, "value");
             return {
               rawValue: value,
               raw: toRaw ? toRaw(value) : String(value)
@@ -5145,8 +5200,8 @@ var require_babel = __commonJS({
     var flow_1 = tslib_1.__importDefault(require_flow());
     var shared_1 = require_shared();
     function default_1(fork) {
-      var types = fork.use(types_1.default);
-      var def = types.Type.def;
+      var types2 = fork.use(types_1.default);
+      var def = types2.Type.def;
       fork.use(babel_core_1.default);
       fork.use(flow_1.default);
       def("V8IntrinsicIdentifier").bases("Expression").build("name").field("name", String);
@@ -5173,12 +5228,12 @@ var require_typescript = __commonJS({
     function default_1(fork) {
       fork.use(babel_core_1.default);
       fork.use(type_annotations_1.default);
-      var types = fork.use(types_1.default);
-      var n = types.namedTypes;
-      var def = types.Type.def;
-      var or = types.Type.or;
+      var types2 = fork.use(types_1.default);
+      var n = types2.namedTypes;
+      var def = types2.Type.def;
+      var or = types2.Type.or;
       var defaults = fork.use(shared_1.default).defaults;
-      var StringLiteral = types.Type.from(function(value, deep) {
+      var StringLiteral = types2.Type.from(function(value, deep) {
         if (n.StringLiteral && n.StringLiteral.check(value, deep)) {
           return true;
         }
@@ -5388,7 +5443,7 @@ var require_main = __commonJS({
     var someField = _a.someField;
     var Type = _a.Type;
     var use = _a.use;
-    var visit2 = _a.visit;
+    var visit3 = _a.visit;
     exports2.astNodesAreEquivalent = astNodesAreEquivalent;
     exports2.builders = builders;
     exports2.builtInTypes = builtInTypes;
@@ -5405,7 +5460,7 @@ var require_main = __commonJS({
     exports2.someField = someField;
     exports2.Type = Type;
     exports2.use = use;
-    exports2.visit = visit2;
+    exports2.visit = visit3;
     Object.assign(namedTypes_1.namedTypes, n);
   }
 });
@@ -5692,10 +5747,10 @@ function transformFile(filePath, appRoot, strings, localeData) {
   (0, import_ast_types.visit)(ast, {
     visitJSXText(nodePath) {
       const originalValue = nodePath.node.value;
-      const trimmed = originalValue.trim();
-      if (!trimmed) return this.traverse(nodePath);
+      const normalized = normalizeJSXWhitespace(originalValue);
+      if (!normalized) return this.traverse(nodePath);
       const extracted = findExtracted(
-        trimmed,
+        normalized,
         filePath,
         fileStrings,
         "jsx-text"
@@ -5705,7 +5760,7 @@ function transformFile(filePath, appRoot, strings, localeData) {
       const trailingChar = originalValue[originalValue.length - 1];
       const hasLeadingSpace = (() => {
         if (leadingChar !== " ") return false;
-        const contentStart = originalValue.indexOf(trimmed[0]);
+        const contentStart = originalValue.indexOf(normalized[0]);
         if (contentStart === 0) return false;
         const beforeContent = originalValue.slice(0, contentStart);
         return !beforeContent.includes("\n");
@@ -5713,7 +5768,7 @@ function transformFile(filePath, appRoot, strings, localeData) {
       const hasTrailingSpace = (() => {
         if (trailingChar !== " ") return false;
         const contentEnd = originalValue.lastIndexOf(
-          trimmed[trimmed.length - 1]
+          normalized[normalized.length - 1]
         );
         const afterContent = originalValue.slice(contentEnd + 1);
         return !afterContent.includes("\n");
@@ -5923,22 +5978,21 @@ function transformFile(filePath, appRoot, strings, localeData) {
   };
 }
 function functionBodyContainsTCall(block) {
-  if (!block || block.type !== "BlockStatement") return false;
-  return nodeContainsTCall(block);
-}
-function nodeContainsTCall(node) {
-  if (!node || typeof node !== "object") return false;
-  if (node.type === "CallExpression" && node.callee?.type === "Identifier" && node.callee?.name === "t") {
-    return true;
+  if (!block || block.type !== "BlockStatement") {
+    return false;
   }
-  for (const value of Object.values(node)) {
-    if (Array.isArray(value)) {
-      if (value.some((child) => nodeContainsTCall(child))) return true;
-    } else if (value && typeof value === "object") {
-      if (nodeContainsTCall(value)) return true;
+  let found = false;
+  (0, import_ast_types.visit)(block, {
+    visitCallExpression(path15) {
+      const node = path15.node;
+      if (node.callee?.type === "Identifier" && node.callee.name === "t") {
+        found = true;
+        return false;
+      }
+      this.traverse(path15);
     }
-  }
-  return false;
+  });
+  return found;
 }
 async function transformProject(appRoot, strings, localeData) {
   const uniqueFiles = [...new Set(strings.map((s) => s.filePath))];
@@ -5967,6 +6021,7 @@ var init_transformer = __esm({
     import_path8 = __toESM(require("path"));
     init_fs();
     init_logger();
+    init_normalize();
   }
 });
 
@@ -6155,24 +6210,44 @@ async function replace(options) {
   1. Run your app and verify everything works:
        npx expo start
 
-  2. If something looks wrong, revert using git or the revert command:
-       ${import_chalk3.default.cyan("git checkout .")}
-       This discards all uncommitted changes and restores your files.
-       This is why we asked you to commit before running replace.
-       or
+  2. If something looks wrong, revert your changes:
        ${import_chalk3.default.cyan("rai revert")}
-       This restores all files to their state before replace was run.
+       Restores all files to their state before replace was run.
 
-  3. If everything looks good, commit:
+       Or using git:
+       ${import_chalk3.default.cyan("git checkout .")}
+       Discards all uncommitted changes. This is why we asked you to commit before running replace.
+
+  3. If everything looks good, clean up backups and commit:
        ${import_chalk3.default.cyan("rai revert --clean")}
-       makes sure all backup files are deleted (they are not needed anymore)
        ${import_chalk3.default.cyan("git add .")}
        ${import_chalk3.default.cyan('git commit -m "feat: replace strings with i18n t() calls"')}
 
-  4. To add more languages in the future:
-       \u2022 Copy ${import_path10.default.relative(appRoot, localeFilePath)} and translate the values
-       \u2022 Add the new language to your i18n.ts resources object
-  `);
+  4. To add translations for other languages:
+       ${import_chalk3.default.cyan(`rai locales-generate --only fr,es`)}
+       Generates locale files for the specified languages based on your default locale.
+
+       Options:
+         ${import_chalk3.default.gray("--only <langs>")}     Comma-separated language codes to generate (e.g. fr,es,ar)
+         ${import_chalk3.default.gray("--force")}            Overwrite existing locale files
+         ${import_chalk3.default.gray("--with-imports")}     Automatically wire imports into your i18n config file
+         ${import_chalk3.default.gray("--dry-run")}          Preview what would be generated without writing files
+
+       Then translate the values in the generated files, or wire up a translation API.
+       Add each new language to your i18n.ts resources object:
+
+       ${import_chalk3.default.cyan(`import fr from './${import_path10.default.relative(appRoot, localeFilePath).replace("en", "fr").replace(/\\/g, "/")}'
+
+  i18n.init({
+    resources: {
+      en: { translation: en },
+      fr: { translation: fr },  // \u2190 add this
+    },
+    ...
+  })`)}
+
+  5. Copy ${import_path10.default.relative(appRoot, localeFilePath)} as a reference for manual translations.
+`);
 }
 var import_path10, import_chalk3, import_ora2;
 var init_replace = __esm({
@@ -6270,12 +6345,453 @@ var init_revert = __esm({
   }
 });
 
+// src/utils/locale-path.ts
+function resolveLocaleFilePath2(config, langCode) {
+  return config.localeFileName ? import_path12.default.join(config.localesDir, langCode, `${config.localeFileName}.json`) : import_path12.default.join(config.localesDir, `${langCode}.json`);
+}
+var import_path12;
+var init_locale_path = __esm({
+  "src/utils/locale-path.ts"() {
+    "use strict";
+    init_cjs_shims();
+    import_path12 = __toESM(require("path"));
+  }
+});
+
+// src/utils/flatten-keys.ts
+function flattenKeys(obj, prefix = "") {
+  const out = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+    if (value !== null && typeof value === "object") {
+      Object.assign(out, flattenKeys(value, fullKey));
+    } else {
+      out[fullKey] = value;
+    }
+  }
+  return out;
+}
+function setNestedKey(obj, keyPath, value) {
+  const parts = keyPath.split(".");
+  let cursor = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i];
+    if (typeof cursor[part] !== "object" || cursor[part] === null) {
+      cursor[part] = {};
+    }
+    cursor = cursor[part];
+  }
+  cursor[parts[parts.length - 1]] = value;
+}
+var init_flatten_keys = __esm({
+  "src/utils/flatten-keys.ts"() {
+    "use strict";
+    init_cjs_shims();
+  }
+});
+
+// src/commands/wire-i18n-imports.ts
+function wireLocaleImports(i18nFilePath, localesDir, localeFileName, languages) {
+  if (!import_fs12.default.existsSync(i18nFilePath)) {
+    console.warn(
+      `\u26A0 ${i18nFilePath} not found \u2014 skipping import wiring.
+  Create it first (see \`rai scan\` output for the template), then re-run with --with-imports.`
+    );
+    return [];
+  }
+  const source = import_fs12.default.readFileSync(i18nFilePath, "utf-8");
+  const ast = recast2.parse(source, {
+    parser: {
+      parse: (src) => (0, import_parser.parse)(src, { sourceType: "module", plugins: ["typescript"] })
+    }
+  });
+  const b2 = recast2.types.builders;
+  const existingImportSources = /* @__PURE__ */ new Set();
+  (0, import_ast_types2.visit)(ast, {
+    visitImportDeclaration(path15) {
+      existingImportSources.add(path15.node.source.value);
+      this.traverse(path15);
+    }
+  });
+  const i18nDir = import_path13.default.dirname(i18nFilePath);
+  const addedLangs = [];
+  const newImportNodes = [];
+  for (const lang of languages) {
+    const localeFilePath = resolveLocaleFilePath2(
+      { localesDir, localeFileName },
+      lang
+    );
+    let importPath = "./" + import_path13.default.relative(i18nDir, localeFilePath).replace(/\\/g, "/");
+    if (!importPath.startsWith(".")) importPath = "./" + importPath;
+    if (existingImportSources.has(importPath)) continue;
+    newImportNodes.push(
+      b2.importDeclaration(
+        [b2.importDefaultSpecifier(b2.identifier(lang))],
+        b2.stringLiteral(importPath)
+      )
+    );
+    addedLangs.push(lang);
+  }
+  if (newImportNodes.length === 0) {
+    return [];
+  }
+  const programBody = ast.program.body;
+  let lastImportIndex = -1;
+  programBody.forEach((node, i) => {
+    if (node.type === "ImportDeclaration") lastImportIndex = i;
+  });
+  programBody.splice(lastImportIndex + 1, 0, ...newImportNodes);
+  (0, import_ast_types2.visit)(ast, {
+    visitObjectProperty(path15) {
+      const key = path15.node.key;
+      const keyName = key.type === "Identifier" ? key.name : key.value;
+      if (keyName === "resources" && path15.node.value.type === "ObjectExpression") {
+        for (const lang of addedLangs) {
+          path15.node.value.properties.push(
+            b2.objectProperty(
+              b2.identifier(lang),
+              b2.objectExpression([
+                b2.objectProperty(
+                  b2.identifier("translation"),
+                  b2.identifier(lang)
+                )
+              ])
+            )
+          );
+        }
+      }
+      this.traverse(path15);
+    }
+  });
+  const output = recast2.print(ast).code;
+  import_fs12.default.writeFileSync(i18nFilePath, output);
+  return addedLangs;
+}
+var import_fs12, import_path13, import_parser, import_ast_types2, recast2;
+var init_wire_i18n_imports = __esm({
+  "src/commands/wire-i18n-imports.ts"() {
+    "use strict";
+    init_cjs_shims();
+    import_fs12 = __toESM(require("fs"));
+    import_path13 = __toESM(require("path"));
+    import_parser = require("@babel/parser");
+    import_ast_types2 = __toESM(require_main());
+    recast2 = __toESM(require("recast"));
+    init_locale_path();
+  }
+});
+
+// src/utils/validation.ts
+function validateLanguageCodes(codes) {
+  const valid = [];
+  const invalid = [];
+  for (const code of codes) {
+    const trimmed = code.trim().toLowerCase();
+    if (SUPPORTED_LANGUAGE_CODES.includes(trimmed)) {
+      valid.push(trimmed);
+    } else {
+      invalid.push(trimmed);
+    }
+  }
+  return { valid, invalid };
+}
+var init_validation = __esm({
+  "src/utils/validation.ts"() {
+    "use strict";
+    init_cjs_shims();
+    init_config();
+  }
+});
+
+// src/commands/locales-generate.ts
+var locales_generate_exports = {};
+__export(locales_generate_exports, {
+  runLocalesGenerate: () => runLocalesGenerate
+});
+function generateLocaleFile2(defaultContent, targetFilePath, locale, force, dryRun) {
+  const fileExists = import_fs13.default.existsSync(targetFilePath);
+  const isNew = !fileExists || force;
+  if (isNew) {
+    if (!dryRun) {
+      import_fs13.default.mkdirSync(import_path14.default.dirname(targetFilePath), { recursive: true });
+      import_fs13.default.writeFileSync(
+        targetFilePath,
+        JSON.stringify(defaultContent, null, 2) + "\n"
+      );
+    }
+    return {
+      locale,
+      filePath: targetFilePath,
+      isNew: !fileExists,
+      keysAdded: Object.keys(flattenKeys(defaultContent))
+    };
+  }
+  const existingContent = JSON.parse(import_fs13.default.readFileSync(targetFilePath, "utf-8"));
+  const defaultFlat = flattenKeys(defaultContent);
+  const existingFlat = flattenKeys(existingContent);
+  const keysAdded = [];
+  for (const [key, value] of Object.entries(defaultFlat)) {
+    if (!(key in existingFlat)) {
+      setNestedKey(existingContent, key, value);
+      keysAdded.push(key);
+    }
+  }
+  if (keysAdded.length > 0 && !dryRun) {
+    import_fs13.default.writeFileSync(
+      targetFilePath,
+      JSON.stringify(existingContent, null, 2) + "\n"
+    );
+  }
+  return {
+    locale,
+    filePath: targetFilePath,
+    isNew: false,
+    keysAdded
+  };
+}
+async function runLocalesGenerate(options) {
+  const appRoot = import_path14.default.resolve(options.path);
+  const config = await requireConfig(appRoot);
+  const rawTargets = options.only ?? config.targetLanguages ?? [];
+  if (rawTargets.length === 0) {
+    logger.error(
+      "No target languages specified.\n\n  Option A \u2014 pass languages directly:\n    rai locales-generate --only fr,es,ar\n\n  Option B \u2014 add languages to your config and run without --only:\n    targetLanguages: ['fr', 'es', 'ar']  // in rai.config.ts"
+    );
+    process.exit(1);
+  }
+  const { valid, invalid } = validateLanguageCodes(rawTargets);
+  if (invalid.length > 0) {
+    logger.warn(
+      `The following code${invalid.length === 1 ? " is" : "s are"} not valid ISO 639-1 language codes and will be skipped:
+` + invalid.map((c) => `    \u2022 "${c}"`).join("\n")
+    );
+    logger.dim(
+      "  Valid examples: en, fr, es, de, ar, zh, pt, ja, ru, tr, ko, ja\n  Full list: https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes"
+    );
+    logger.newline();
+  }
+  if (valid.length === 0) {
+    logger.error(
+      "No valid language codes remaining. Nothing to generate.\n\n  Check your codes against the ISO 639-1 standard:\n  https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes"
+    );
+    process.exit(1);
+  }
+  const skippedDefault = valid.filter((c) => c === config.defaultLanguage);
+  const targets = valid.filter((c) => c !== config.defaultLanguage);
+  if (skippedDefault.length > 0) {
+    logger.warn(
+      `  Skipping "${config.defaultLanguage}" \u2014 this is your default language.
+  Its locale file is managed by "rai scan", not "rai locales-generate".`
+    );
+    logger.newline();
+  }
+  if (targets.length === 0) {
+    logger.error("No languages to generate after filtering. Nothing to do.");
+    process.exit(1);
+  }
+  const defaultFilePath = resolveLocaleFilePath2(config, config.defaultLanguage);
+  if (!import_fs13.default.existsSync(defaultFilePath)) {
+    logger.error(
+      `Default locale file not found at:
+  ${defaultFilePath}
+
+  Run "rai scan" first to generate it.`
+    );
+    process.exit(1);
+  }
+  const defaultContent = JSON.parse(import_fs13.default.readFileSync(defaultFilePath, "utf-8"));
+  const defaultKeyCount = Object.keys(flattenKeys(defaultContent)).length;
+  if (options.force) {
+    const existingTargets = targets.filter(
+      (lang) => import_fs13.default.existsSync(resolveLocaleFilePath2(config, lang))
+    );
+    if (existingTargets.length > 0 && !options.yes) {
+      const confirmed = await confirm(
+        `--force will overwrite ${existingTargets.length} existing locale file(s) (${existingTargets.join(", ")}), discarding any manual translations. Continue?`,
+        false
+      );
+      if (!confirmed) {
+        logger.info("Aborted \u2014 no files were changed.");
+        return;
+      }
+    }
+  }
+  logger.section("rai \u2014 Locales Generate");
+  logger.info(
+    `  Default locale : ${config.defaultLanguage} (${defaultKeyCount} keys)`
+  );
+  logger.info(`  Targets        : ${targets.join(", ")}`);
+  if (options.dryRun)
+    logger.info("  Mode           : dry run (no files written)");
+  logger.newline();
+  logger.info("Generating...");
+  logger.newline();
+  const results = [];
+  for (const lang of targets) {
+    const targetFilePath = resolveLocaleFilePath2(config, lang);
+    const result = generateLocaleFile2(
+      defaultContent,
+      targetFilePath,
+      lang,
+      !!options.force,
+      !!options.dryRun
+    );
+    results.push(result);
+    const displayPath = targetFilePath.length > 60 ? "..." + targetFilePath.slice(-57) : targetFilePath;
+    if (result.isNew) {
+      logger.success(
+        `${displayPath} \u2014 created (${result.keysAdded.length} keys, all pending translation)`
+      );
+    } else if (result.keysAdded.length > 0) {
+      logger.success(
+        `${displayPath} \u2014 exists, ${result.keysAdded.length} new key(s) added:`
+      );
+      for (const key of result.keysAdded) {
+        logger.dim(`      \xB7 ${key}`);
+      }
+    } else {
+      logger.info(`${displayPath} \u2014 up to date, no new keys`);
+    }
+  }
+  if (options.withImports && !options.dryRun) {
+    if (!config.i18nFilePath) {
+      logger.warn(
+        "i18nFilePath not set in rai.config.ts \u2014 skipping import wiring."
+      );
+    } else {
+      const wired = wireLocaleImports(
+        config.i18nFilePath,
+        config.localesDir,
+        config.localeFileName,
+        targets
+      );
+      if (wired.length > 0) {
+        logger.success(
+          `Wired into ${config.i18nFilePath}: ${wired.join(", ")}`
+        );
+      } else {
+        logger.info(
+          `${config.i18nFilePath} already up to date \u2014 no imports added.`
+        );
+      }
+    }
+  }
+  const pendingTranslation = results.filter((r) => r.keysAdded.length > 0);
+  if (pendingTranslation.length > 0) {
+    logger.section("Next steps");
+    logger.info(
+      "  Translate the pending keys in each generated file.\n  The values currently match your default language \u2014 replace them with translations."
+    );
+    if (!options.withImports && config.i18nFilePath) {
+      logger.newline();
+      logger.info(
+        `  Once translated, wire the imports into your i18n config:
+    rai locales-generate --only ${targets.join(",")} --with-imports`
+      );
+    }
+  }
+  logger.newline();
+}
+var import_fs13, import_path14;
+var init_locales_generate = __esm({
+  "src/commands/locales-generate.ts"() {
+    "use strict";
+    init_cjs_shims();
+    import_fs13 = __toESM(require("fs"));
+    import_path14 = __toESM(require("path"));
+    init_locale_path();
+    init_flatten_keys();
+    init_wire_i18n_imports();
+    init_logger();
+    init_prompt();
+    init_validation();
+    init_config2();
+  }
+});
+
 // src/cli.ts
+var cli_exports = {};
+__export(cli_exports, {
+  APP_VERSION: () => APP_VERSION
+});
+module.exports = __toCommonJS(cli_exports);
 init_cjs_shims();
 var import_commander = require("commander");
+
+// package.json
+var package_default = {
+  name: "react-auto-i18n",
+  version: "0.1.1",
+  description: "Automatic i18n scanner and code transformer for React Native apps",
+  main: "dist/index.js",
+  types: "dist/index.d.ts",
+  bin: {
+    rai: "dist/cli.js"
+  },
+  files: [
+    "dist"
+  ],
+  scripts: {
+    build: "tsup && tsc --declaration --emitDeclarationOnly --outDir dist",
+    dev: "tsup --watch",
+    clean: "rimraf dist",
+    prepublishOnly: "npm run clean && npm run build"
+  },
+  keywords: [
+    "react",
+    "react-native",
+    "expo",
+    "i18n",
+    "internationalization",
+    "cli",
+    "automation",
+    "translation",
+    "i18next",
+    "react-i18next"
+  ],
+  engines: {
+    node: ">=18.0.0"
+  },
+  license: "MIT",
+  repository: {
+    type: "git",
+    url: "git+https://github.com/SiandjaRemy/react-auto-i18n.git"
+  },
+  homepage: "https://github.com/SiandjaRemy/react-auto-i18n#readme",
+  bugs: {
+    url: "https://github.com/SiandjaRemy/react-auto-i18n/issues"
+  },
+  dependencies: {
+    "@babel/generator": "^8.0.0",
+    "@babel/parser": "^8.0.4",
+    "@babel/traverse": "^8.0.4",
+    "@babel/types": "^8.0.4",
+    "@inquirer/prompts": "^8.5.2",
+    chalk: "^4.1.2",
+    commander: "^15.0.0",
+    glob: "^13.0.6",
+    ignore: "^7.0.6",
+    jiti: "^2.7.0",
+    ora: "^5.4.1",
+    recast: "^0.23.19"
+  },
+  devDependencies: {
+    "@types/babel__core": "^7.20.5",
+    "@types/babel__generator": "^7.27.0",
+    "@types/babel__traverse": "^7.28.0",
+    "@types/node": "^26.1.1",
+    rimraf: "^6.1.3",
+    "ts-node": "^10.9.2",
+    tsup: "^8.5.1",
+    typescript: "^7.0.2"
+  }
+};
+
+// src/cli.ts
+var APP_VERSION = package_default.version;
 import_commander.program.name("rai").description(
   "Automatic i18n scanner and code transformer for React Native apps"
-).version("0.1.0").enablePositionalOptions().option("--debug", "Show verbose debug output").hook("preAction", () => {
+).version(APP_VERSION).enablePositionalOptions().option("--debug", "Show verbose debug output").hook("preAction", () => {
   if (import_commander.program.opts().debug) {
     const { setDebugMode: setDebugMode2 } = (init_logger(), __toCommonJS(logger_exports));
     setDebugMode2(true);
@@ -6300,5 +6816,19 @@ import_commander.program.command("revert").description("Restore source files to 
   const { revert: revert2 } = await Promise.resolve().then(() => (init_revert(), revert_exports));
   await revert2(options);
 });
+import_commander.program.command("locales-generate").description("Generate locale files for target languages").option("-p, --path <path>", "Root path of the project", ".").option(
+  "--only <languages>",
+  "Comma-separated list of language codes to generate"
+).option(
+  "--force",
+  "Overwrite existing locale files (discards manual translations)"
+).option("--yes", "Skip confirmation prompt when using --force").option("--with-imports", "Automatically wire imports into i18n file").option("--dry-run", "Preview without writing files").action(async (options) => {
+  const { runLocalesGenerate: runLocalesGenerate2 } = await Promise.resolve().then(() => (init_locales_generate(), locales_generate_exports));
+  await runLocalesGenerate2(options);
+});
 import_commander.program.parse(process.argv);
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  APP_VERSION
+});
 //# sourceMappingURL=cli.js.map

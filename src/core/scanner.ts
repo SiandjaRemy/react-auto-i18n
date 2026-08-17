@@ -8,6 +8,7 @@ import path from "path";
 import { readFileSafe } from "../utils/fs";
 import { logger } from "../utils/logger";
 import type { RaiConfig } from "../types/config";
+import { normalizeJSXWhitespace } from "../utils/normalize";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -782,19 +783,43 @@ export function extractStringsFromFile(
     //    JSXText includes all whitespace and newlines between tags,
     //    so we trim and check extractability carefully.
     JSXText(nodePath) {
-      const value = nodePath.node.value;
-      const trimmed = value.trim();
-      if (!isExtractable(trimmed)) return;
 
-      const { key, fullKey } = buildFullKey(namespace, trimmed, maxKeyLen);
+      /**
+       * Normalize JSX whitespace before doing anything else.
+       *
+       * JSXText nodes often span multiple lines with indentation:
+       *
+       *   <ThemedText>
+       *     hook lets you inspect what the
+       *     user's current color scheme is.
+       *   </ThemedText>
+       *
+       * The raw value is "\n    hook lets you inspect what the\n    user's..."
+       * React collapses this to "hook lets you inspect what the user's..."
+       * at render time — the newlines and indentation are invisible.
+       *
+       * If we store the raw value in the locale file, t() returns it with
+       * literal \n characters, which React Native renders as actual line
+       * breaks, breaking the layout.
+       *
+       * We must normalize the same way React does:
+       *   1. Split on newlines
+       *   2. Trim each line
+       *   3. Drop empty lines
+       *   4. Join with a single space
+       */
+      const normalized = normalizeJSXWhitespace(nodePath.node.value);
+      if (!isExtractable(normalized)) return;
+
+      const { key, fullKey } = buildFullKey(namespace, normalized, maxKeyLen);
 
       results.push({
         filePath,
         namespace,
         key,
         fullKey,
-        originalText: trimmed,
-        translationValue: trimmed,
+        originalText: normalized,
+        translationValue: normalized,
         params: [],
         sourceType: "jsx-text",
       });

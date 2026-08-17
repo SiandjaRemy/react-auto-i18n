@@ -113,5 +113,28 @@ export interface RaiConfig {
      * @example ['src/mocks/**', 'src/fixtures/**', 'src/dev/**']
      */
     exclude: string[];
+    /**
+     * Languages to generate translation files for, in addition to defaultLanguage.
+     *
+     * Run `rai locales generate` after `rai scan` to create these files.
+     * Each file starts as a copy of the default language file, ready to
+     * hand off for manual translation (or to paste into an LLM/translator).
+     *
+     * Must be valid ISO 639-1 codes.
+     *
+     * @default []
+     * @example ['fr', 'es', 'de']
+     */
+    targetLanguages: LanguageCode[];
+    /**
+     * Path to your i18n setup file (the one with `i18n.use(initReactI18next).init(...)`).
+     *
+     * `rai locales generate --with-imports` edits this file to import and
+     * register newly generated locale files. If the file doesn't exist yet,
+     * import wiring is skipped with a warning.
+     *
+     * @default 'src/i18n.ts'
+     */
+    i18nFilePath: "src/i18n.ts";
 }
 //# sourceMappingURL=config.d.ts.map

@@ -5,6 +5,7 @@ import { readFileSafe } from "../utils/fs";
 import { logger } from "../utils/logger";
 import type { ExtractedString } from "./scanner";
 import type { LocaleFile } from "./scaffolder";
+import { normalizeJSXWhitespace } from "../utils/normalize";
 
 export interface TransformResult {
   filePath: string;
@@ -509,16 +510,32 @@ export function transformFile(
   visit(ast, {
     visitJSXText(nodePath) {
       const originalValue = nodePath.node.value as string;
-      const trimmed = originalValue.trim();
-      if (!trimmed) return this.traverse(nodePath);
+
+      /**
+       * Normalize using the same function as the scanner.
+       *
+       * The scanner stores keys using normalizeJSXWhitespace, which collapses
+       * multiline JSXText like:
+       *   " sets up\n              the tab navigator."
+       * into:
+       *   "sets up the tab navigator."
+       *
+       * If the transformer looks up by .trim() instead, it produces:
+       *   "sets up\n              the tab navigator."
+       * which does NOT match the stored key, so the lookup fails silently
+       * and the string is left unreplaced.
+       *
+       * Both scanner and transformer must use identical normalization.
+       */
+      const normalized = normalizeJSXWhitespace(originalValue);
+      if (!normalized) return this.traverse(nodePath);
 
       const extracted = findExtracted(
-        trimmed,
+        normalized,
         filePath,
         fileStrings,
         "jsx-text",
       );
-
       if (!extracted) return this.traverse(nodePath);
 
       /**
@@ -565,8 +582,8 @@ export function transformFile(
        */
       const hasLeadingSpace = (() => {
         if (leadingChar !== " ") return false;
-        // Find where the trimmed content starts
-        const contentStart = originalValue.indexOf(trimmed[0]);
+        // Find where the normalized content starts
+        const contentStart = originalValue.indexOf(normalized[0]);
         if (contentStart === 0) return false;
         // Check if there's a newline anywhere before the content
         const beforeContent = originalValue.slice(0, contentStart);
@@ -575,9 +592,9 @@ export function transformFile(
 
       const hasTrailingSpace = (() => {
         if (trailingChar !== " ") return false;
-        // Find where the trimmed content ends
+        // Find where the normalized content ends
         const contentEnd = originalValue.lastIndexOf(
-          trimmed[trimmed.length - 1],
+          normalized[normalized.length - 1],
         );
         const afterContent = originalValue.slice(contentEnd + 1);
         return !afterContent.includes("\n");
@@ -928,35 +945,26 @@ export function transformFile(
  * traversal to keep this lightweight.
  */
 function functionBodyContainsTCall(block: any): boolean {
-  if (!block || block.type !== "BlockStatement") return false;
-  return nodeContainsTCall(block);
-}
-
-function nodeContainsTCall(node: any): boolean {
-  if (!node || typeof node !== "object") return false;
-
-  if (
-    node.type === "CallExpression" &&
-    node.callee?.type === "Identifier" &&
-    node.callee?.name === "t"
-  ) {
-    return true;
+  if (!block || block.type !== "BlockStatement") {
+    return false;
   }
 
-  /**
-   * Recurse into all child nodes.
-   * We iterate over the node's values — arrays and objects are
-   * traversed, primitives (strings, numbers, booleans) are skipped.
-   */
-  for (const value of Object.values(node)) {
-    if (Array.isArray(value)) {
-      if (value.some((child) => nodeContainsTCall(child))) return true;
-    } else if (value && typeof value === "object") {
-      if (nodeContainsTCall(value as any)) return true;
-    }
-  }
+  let found = false;
 
-  return false;
+  visit(block, {
+    visitCallExpression(path) {
+      const node = path.node;
+
+      if (node.callee?.type === "Identifier" && node.callee.name === "t") {
+        found = true;
+        return false;
+      }
+
+      this.traverse(path);
+    },
+  });
+
+  return found;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
