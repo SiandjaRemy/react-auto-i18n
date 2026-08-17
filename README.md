@@ -1,6 +1,37 @@
+<div align="center">
+
 # react-auto-i18n
 
-Automatic i18n scaffolding and code transformation for React apps (Also works for React Native/expo).
+</div>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/react-auto-i18n">
+    <img src="https://badge.fury.io/js/react-auto-i18n.svg" alt="npm version" />
+  </a>
+  <a href="https://www.npmjs.com/package/react-auto-i18n">
+    <img src="https://img.shields.io/npm/dm/react-auto-i18n.svg" alt="npm downloads" />
+  </a>
+  <a href="https://www.npmjs.com/package/react-auto-i18n">
+    <img src="https://img.shields.io/bundlephobia/minzip/react-auto-i18n" alt="bundle size" />
+  </a>
+  <a href="https://github.com/SiandjaRemy/react-auto-i18n">
+    <img src="https://img.shields.io/github/stars/SiandjaRemy/react-auto-i18n" alt="GitHub stars" />
+  </a>
+  <a href="https://github.com/SiandjaRemy/react-auto-i18n/issues">
+    <img src="https://img.shields.io/github/issues/SiandjaRemy/react-auto-i18n" alt="GitHub issues" />
+  </a>
+  <a href="https://github.com/SiandjaRemy/react-auto-i18n/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/SiandjaRemy/react-auto-i18n" alt="license" />
+  </a>
+  <a href="https://github.com/SiandjaRemy/react-auto-i18n/pulls">
+    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" />
+  </a>
+</p>
+
+<p align="center">
+  <em>Automatic i18n scaffolding and code transformation for React and React Native apps.</em>
+</p>
+
 
 `react-auto-i18n` scans your app's source code, extracts every translatable string, generates locale files, and rewrites your source files to use `t()` calls — all without touching your code until you say so.
 
@@ -9,17 +40,19 @@ Automatic i18n scaffolding and code transformation for React apps (Also works fo
 ## How it works
 
 ```
-rai init      Create the config file
+rai init                Create the config file
      ↓
-rai scan      Scan the app → generate locales/en.json (or your locale file)
+rai scan                Scan the app → generate locales/en.json (or your locale file)
      ↓
-     You: set up react-i18next, commit
+You: set up react-i18next, commit
      ↓
-rai replace   Rewrite source files with t() calls
+rai replace             Rewrite source files with t() calls
      ↓
-     You: verify the app works
+You: verify the app works
      ↓
-rai revert --clean   Delete backups → commit
+rai revert --clean      Delete backups → commit
+     ↓
+rai locales-generate    Generate locale files for other languages
 ```
 
 ---
@@ -30,7 +63,7 @@ rai revert --clean   Delete backups → commit
 npm install react-auto-i18n
 ```
 
-Or you can install it globaly:
+Or install globally so the `rai` command is available anywhere:
 
 ```bash
 npm install -g react-auto-i18n
@@ -41,7 +74,7 @@ npm install -g react-auto-i18n
 ## Requirements
 
 - Node.js 18 or later
-- A React Native or Expo project
+- A React or React Native / Expo project
 
 ---
 
@@ -55,11 +88,13 @@ Run this from your project root:
 rai init
 ```
 
-This creates `rai.config.ts` with annotated defaults. Open it and check at minimum:
+This creates `rai.config.ts` with typed defaults. Open it and check at minimum:
 
 - `defaultLanguage` — the language your app is currently written in
 - `localesDir` — where locale files should be generated (`locales` or `src/locales`)
-- `localeFileName` — leave `null` for `en.json`, or set `'translation'` for `en/translation.json`
+- `localeFileName` — leave `null` for `en.json`, or set a name for the json file name, eg: `'translation'` for `en/translation.json`
+
+A description of each config can be seen at its top (For v2, an update will be done so that details are displayed as JSDoc via hover instead).
 
 ### 2. Scan your app
 
@@ -69,11 +104,11 @@ rai scan
 
 This scans every `.ts`, `.tsx`, `.js`, and `.jsx` file in your project, extracts all translatable strings, and writes a locale JSON file. A preview of everything found is shown before any files are written. You will be asked to confirm before writing.
 
-After scanning, follow the printed instructions to set up `react-i18next` in your project, then commit before continuing.
+After scanning, follow the printed instructions to set up a basic `react-i18next` in your project, then commit before continuing.
 
 ### 3. Replace strings
 
-Make sure you have committed your current state first — this step modifies source files.
+Make sure you have committed your current state first because the next step modifies source files.
 
 ```bash
 rai replace
@@ -102,13 +137,22 @@ git add .
 git commit -m "feat: replace strings with i18n t() calls"
 ```
 
+### 5. Generate locale files for other languages
+
+```bash
+rai locales-generate --only fr,es,ar
+```
+
+This creates locale files for the specified languages, pre-populated with your default language values ready for translation.
+Manual translation is needed for the files content after this point.
+
 ---
 
 ## Commands
 
 ### `rai init`
 
-Generates `rai.config.ts` in your project root with defaults and inline documentation.
+Generates `rai.config.ts` in your project root with typed defaults.
 
 ```bash
 rai init
@@ -131,17 +175,17 @@ rai scan --path ./my-app
 
 **What gets detected:**
 
-| Source | Example |
-|---|---|
-| JSX text content | `<Text>Hello world</Text>` |
-| JSX string expressions | `<Text>{"Hello"}</Text>` |
-| Template literals | `` <Text>{`Hello ${name}`}</Text> `` |
-| Ternary expressions | `<Text>{loading ? "Wait" : "Go"}</Text>` |
-| Logical expressions | `<Text>{flag && "Visible"}</Text>` |
-| Translatable JSX props | `<Button title="Submit" />` |
-| Alert calls | `Alert.alert('Title', 'Are you sure?')` |
-| Throw statements | `throw new Error('Failed to save')` |
-| Custom call patterns | Configurable via `customDetectCalls` |
+| Source                 | Example                                  |
+| ---------------------- | ---------------------------------------- |
+| JSX text content       | `<Text>Hello world</Text>`               |
+| JSX string expressions | `<Text>{"Hello"}</Text>`                 |
+| Template literals      | ``<Text>{`Hello ${name}`}</Text>``       |
+| Ternary expressions    | `<Text>{loading ? "Wait" : "Go"}</Text>` |
+| Logical expressions    | `<Text>{flag && "Visible"}</Text>`       |
+| Translatable JSX props | `<Button title="Submit" />`              |
+| Alert calls            | `Alert.alert('Title', 'Are you sure?')`  |
+| Throw statements       | `throw new Error('Failed to save')`      |
+| Custom call patterns   | Configurable via `customDetectCalls`     |
 
 **What is ignored:**
 
@@ -188,15 +232,15 @@ throw new Error(t('home.failed_to_save'))
 ```tsx
 // Before
 export default function HomeScreen() {
-  return <Text>Hello</Text>
+  return <Text>Hello</Text>;
 }
 
 // After
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from "react-i18next";
 
 export default function HomeScreen() {
-  const { t } = useTranslation()
-  return <Text>{t('home.hello')}</Text>
+  const { t } = useTranslation();
+  return <Text>{t("home.hello")}</Text>;
 }
 ```
 
@@ -207,18 +251,18 @@ If a helper function defined outside a component contains translatable strings, 
 ```tsx
 // Before
 function getStatusLabel(status: string) {
-  return status === 'active' ? 'Active' : 'Inactive'
+  return status === "active" ? "Active" : "Inactive";
 }
 
 // After
-import { TFunction } from 'i18next'
+import { TFunction } from "i18next";
 
 function getStatusLabel(status: string, t: TFunction) {
-  return status === 'active' ? t('status.active') : t('status.inactive')
+  return status === "active" ? t("status.active") : t("status.inactive");
 }
 
 // Call site updated automatically
-<Text>{getStatusLabel(status, t)}</Text>
+<Text>{getStatusLabel(status, t)}</Text>;
 ```
 
 ---
@@ -235,61 +279,79 @@ rai revert --path ./my-app
 
 ---
 
+### `rai locales-generate`
+
+Generates locale files for one or more target languages based on your default locale file.
+
+```bash
+rai locales-generate                            # generates locales for languages set in targetLanguages in the config file
+rai locales-generate --only fr
+rai locales-generate --only fr,es,ar
+rai locales-generate --only fr --force          # overwrite existing files
+rai locales-generate --only fr --with-imports   # also wire imports into i18n file
+rai locales-generate --only fr --dry-run        # preview without writing
+```
+
+Each generated file is a copy of your default locale with the same keys, ready to hand off for translation. If a file already exists, only missing keys are added — existing translations are preserved.
+
+**Flags:**
+
+| Flag             | Description                                                    |
+| ---------------- | -------------------------------------------------------------- |
+| `--only <langs>` | Comma-separated language codes to generate                     |
+| `--force`        | Overwrite existing locale files (discards manual translations) |
+| `--yes`          | Skip confirmation when using `--force`                         |
+| `--with-imports` | Automatically wire imports into your i18n config file          |
+| `--dry-run`      | Preview what would be generated without writing                |
+
+---
+
 ## Configuration
 
-`rai init` generates a fully annotated config file. All fields are optional — missing fields fall back to their defaults.
+`rai init` generates a fully typed config file. All fields are optional — missing fields fall back to their defaults.
 
 ```ts
 // rai.config.ts
-import type { I18nautConfig } from 'react-auto-i18n'
+import type { RaiConfig } from "react-auto-i18n";
 
 export default {
-  // The language your app is currently written in
-  // Must be a valid ISO 639-1 code
-  defaultLanguage: 'en',
-
-  // Where locale files are written, relative to project root
-  localesDir: 'locales',
-
-  // Custom locale file name
-  // null  → locales/en.json
-  // 'translation' → locales/en/translation.json
+  defaultLanguage: "en",
+  localesDir: "locales",
   localeFileName: null,
-
-  // Maximum length of a generated translation key
-  // Keys are trimmed at word boundaries to fit within this limit
   maxKeyLength: 60,
-
-  // Detect strings in Alert.alert() calls
   detectAlerts: true,
-
-  // Detect strings in throw new Error() statements
   detectThrows: true,
-
-  // Additional function call patterns to extract strings from
-  // Format: 'functionName' or 'object.method'
   customDetectCalls: [],
-  // example: ['toast.show', 'setError', 'showMessage']
-
-  // Glob patterns to exclude from scanning
-  // node_modules, dist, build, android, ios, .expo are always excluded
   exclude: [],
-  // example: ['src/mocks/**', 'src/fixtures/**']
-
-  // Managed automatically by the CLI — do not edit
-  _translatedLanguages: [],
-  _lastSyncAt: null,
-
-} satisfies Partial<I18nautConfig>
+  targetLanguages: [],
+  i18nFilePath: "src/i18n.ts",
+} satisfies Partial<RaiConfig>;
 ```
+
+
+### Config fields
+
+| Field               | Default         | Description                                                                        |
+| ------------------- | --------------- | ---------------------------------------------------------------------------------- |
+| `defaultLanguage`   | `'en'`          | ISO 639-1 code of your app's current language                                      |
+| `localesDir`        | `'locales'`     | Directory where locale files are generated                                         |
+| `localeFileName`    | `null`          | Custom file name — `null` for `en.json`, `'translation'` for `en/translation.json` |
+| `maxKeyLength`      | `60`            | Maximum length of a generated translation key                                      |
+| `detectAlerts`      | `true`          | Extract strings from `Alert.alert()` calls                                         |
+| `detectThrows`      | `true`          | Extract strings from `throw new Error()` statements                                |
+| `customDetectCalls` | `[]`            | Additional function patterns to extract strings from                               |
+| `exclude`           | `[]`            | Glob patterns to exclude from scanning                                             |
+| `targetLanguages`   | `[]`            | Languages to generate with `rai locales-generate`                                  |
+| `i18nFilePath`      | `'src/i18n.ts'` | Path to your i18n setup file (used by `--with-imports`)                            |
 
 ### Language codes
 
-`defaultLanguage` must be a valid [ISO 639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) two-letter code. Your editor will highlight invalid values directly in the config file.
+`defaultLanguage` and `targetLanguages` must be valid [ISO 639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) two-letter codes. Your editor will highlight invalid values directly in the config file.
 
 ### Locale structure
 
 **Default (`localeFileName: null`):**
+
 ```
 locales/
 └── en.json
@@ -308,6 +370,7 @@ Keys follow a `namespace.string_key` format where the namespace is derived from 
 Keys from the same file share the same namespace prefix, so sorting the file groups them together naturally.
 
 **Custom file name (`localeFileName: 'translation'`):**
+
 ```
 locales/
 └── en/
@@ -333,23 +396,23 @@ npm install i18next react-i18next
 ### Create `src/i18n.ts`
 
 ```ts
-import i18n from 'i18next'
-import { initReactI18next } from 'react-i18next'
-import en from './locales/en.json'
+import i18n from "i18next";
+import { initReactI18next } from "react-i18next";
+import en from "./locales/en.json";
 // adjust the import path based on your localesDir and localeFileName
 
 i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
   },
-  lng: 'en',
-  fallbackLng: 'en',
+  lng: "en",
+  fallbackLng: "en",
   interpolation: {
     escapeValue: false,
   },
-})
+});
 
-export default i18n
+export default i18n;
 ```
 
 ### Import in your entry point
@@ -357,53 +420,50 @@ export default i18n
 For Expo Router (`app/_layout.tsx`):
 
 ```ts
-import '../src/i18n'  // must be the first import
+import "../src/i18n"; // must be the first import
 ```
 
 For standard React Native (`App.tsx`):
 
 ```ts
-import './src/i18n'
+import "./src/i18n";
 ```
 
 ---
 
 ## Adding languages
 
-Once your app is working with the default language:
-
-1. Copy your locale file and translate the values:
+Once your app is working with the default language, generate locale files for other languages:
 
 ```bash
-cp locales/en.json locales/fr.json
-# translate the values in fr.json
+rai locales-generate --only fr,es
 ```
 
-2. Add the new language to `src/i18n.ts`:
+Then translate the values in each generated file. The files contain your default language's text as placeholder values, ready to be replaced with translations.
+
+Add each language to `src/i18n.ts`:
 
 ```ts
-import en from './locales/en.json'
-import fr from './locales/fr.json'
+import en from "./locales/en.json";
+import fr from "./locales/fr.json";
 
 i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
     fr: { translation: fr },
   },
-  lng: 'en',
-  fallbackLng: 'en',
+  lng: "en",
+  fallbackLng: "en",
   // ...
-})
+});
 ```
 
-3. Switch the active language at runtime:
+Switch the active language at runtime:
 
 ```ts
-import i18n from './src/i18n'
-i18n.changeLanguage('fr')
+import i18n from "./src/i18n";
+i18n.changeLanguage("fr");
 ```
-
-Automatic translation via API (Google Translate, DeepL) is planned for v2.
 
 ---
 
@@ -420,7 +480,7 @@ These flags work with any command:
 
 ## Known limitations
 
-These are documented limitations of v1. They are candidates for future releases.
+These are documented limitations of v1.
 
 **Hook injection uses naming conventions.**
 Components are identified by their function name starting with an uppercase letter, or by being a default export. Functions not matching these patterns (HOCs, render props, factory functions) may not receive the hook automatically and will need manual adjustment.
@@ -429,7 +489,7 @@ Components are identified by their function name starting with an uppercase lett
 When a helper function in file A is called from file B, the call site in file B is not updated to pass `t`. Only call sites within the same file are patched. Cross-file call sites need to be updated manually.
 
 **No string deduplication.**
-The same string appearing in multiple files generates separate keys in each file's namespace. There is no "common" namespace for shared strings. This is intentional for v1 — it keeps locale files self-contained per screen and avoids the complexity of tracking shared usage.
+The same string appearing in multiple files generates separate keys in each file's namespace. There is no "common" namespace for shared strings. This is intentional for v1 — it keeps locale files self-contained per screen.
 
 **Computed strings are not detected.**
 Strings built by concatenation or computed at runtime cannot be detected by static analysis:
@@ -442,37 +502,38 @@ const key = condition ? keyA : keyB  // variable key
 ```
 
 **`rai replace` is not idempotent.**
-Running `rai replace` twice on an already-replaced file will produce incorrect output. Always revert before re-running.
+Running `rai replace` twice on an already-replaced file will produce incorrect output. Always use `rai revert` before re-running.
 
 ---
 
 ## Troubleshooting
 
 **`No i18next instance` warning at runtime**
-Your `src/i18n.ts` file is not being imported before components render. Make sure `import './src/i18n'` (or the correct relative path) is the **first** import in your entry point file (`App.tsx` or `app/_layout.tsx`).
+Your `src/i18n.ts` file is not being imported before components render. Make sure the import is the **first** import in your entry point file (`App.tsx` or `app/_layout.tsx`).
 
 **`Property 't' doesn't exist` error**
-The hook was not injected into a component. This happens when the component uses a naming pattern the tool does not recognize (lowercase name, HOC wrapper, etc.). Add `const { t } = useTranslation()` manually to the component.
+The hook was not injected into a component. This happens when the component uses a naming pattern the tool does not recognize. Add `const { t } = useTranslation()` manually to the component.
 
 **Strings not being detected**
-Run `rai scan --debug` to see every file being considered and which strings are found. Check that the file is not excluded by your `.gitignore` or `config.exclude`. Check that the string is inside a `<Text>` tag or a recognized prop name.
+Run `rai scan --debug` to see every file considered and which strings are found. Check that the file is not excluded by your `.gitignore` or `config.exclude`.
 
 **Import path error in `i18n.ts`**
-The correct import path depends on where `i18n.ts` lives relative to your locale files. The `rai scan` output prints the exact path to use for your configuration.
+The `rai scan` output prints the exact import path to use for your configuration. Use that path rather than guessing.
 
-**`rai replace` modified files look correct but the app still shows keys**
-The i18next `resources` object in `src/i18n.ts` is not including the locale file, or the namespace is wrong. Make sure the locale file is imported and listed under the correct language code.
+**App still shows keys after replace**
+The i18next `resources` object in `src/i18n.ts` is not including the locale file. Make sure the locale file is imported and listed under the correct language code.
 
 ---
 
-## Roadmap
+## Future updates
 
-- **v2 — Translation API integration:** run `rai translate fr,es,ar` to generate translated locale files automatically via Google Translate or DeepL
-- **v2 — Sync command:** detect new or changed strings and update all locale files without re-running the full pipeline
-- **v2 — Mirror locale structure:** one JSON file per screen/component mirroring the app's folder structure
-- **v2 — Common namespace:** deduplicate strings used in 3 or more files into a shared `common.json`
-- **v2 — Cross-file call site patching:** update helper call sites across files when the helper receives `t` as a parameter
-- **v2 — Config option for hook injection strategy:** choose between parameter passing or context for helpers
+- **Translation API integration:** `rai translate fr,es,ar` to generate translated locale files via Google Translate or DeepL
+- **Sync command:** detect new or changed strings and update all locale files without re-running the full pipeline
+- **Mirror locale structure:** one JSON file per screen/component mirroring the app's folder structure
+- **Common namespace:** deduplicate strings used across multiple files into a shared `common.json`
+- **Cross-file call site patching:** update helper call sites across files when the helper receives `t` as a parameter
+- **Computed strings detection:** enable the detection of strings built by concatenation or computed at runtime
+- **Cross-file helper call sites updates** enable the update of helper functions wherever they,re used
 
 ---
 

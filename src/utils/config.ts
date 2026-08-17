@@ -31,6 +31,8 @@ export const DEFAULT_CONFIG: RaiConfig = {
   detectThrows: true,
   customDetectCalls: [],
   exclude: [],
+  targetLanguages: [],
+  i18nFilePath: "src/i18n.ts",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

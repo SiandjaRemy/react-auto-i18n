@@ -12,20 +12,6 @@ interface InitOptions {
  *
  * Generates rai.config.ts in the user's project root with
  * sensible defaults and inline documentation for every option.
- *
- * Design decisions:
- *
- * 1. We generate a file with defaults rather than an interactive prompt.
- *    This avoids having to validate user input for every field interactively,
- *    since the TypeScript type on the config catches invalid values in the editor.
- *
- * 2. The config uses `satisfies Partial<RaiConfig>` instead of importing
- *    `defineConfig`. This means the import is type-only — jiti strips it at
- *    runtime so react-auto-i18n does NOT need to be in the user's node_modules.
- *
- * 3. Every config field has a JSDoc comment explaining what it does and
- *    what values are accepted. The user should be able to configure everything
- *    without opening external docs.
  */
 export async function init(options: InitOptions): Promise<void> {
   const appRoot = path.resolve(options.path);
@@ -43,18 +29,6 @@ export async function init(options: InitOptions): Promise<void> {
   logger.section("rai — Init");
 
   // ── Write the config file ──────────────────────────────────────────────────
-  /**
-   * Why write the config as a raw template string?
-   *
-   * If we serialized a JS object with JSON.stringify, we would lose:
-   *   - The `import type` statement
-   *   - The `satisfies` annotation
-   *   - All the JSDoc comments
-   *   - Proper formatting
-   *
-   * A template string gives us full control over the exact output,
-   * which is important since this is a file the user will read and edit.
-   */
   const configContent = `import type { RaiConfig } from 'react-auto-i18n'
 
 /**
@@ -96,7 +70,7 @@ export default {
    * However, its parent directory must already exist.
    * ('src/locales' requires 'src/' to exist — it usually does in RN projects)
    */
-  localesDir: 'locales',
+  localesDir: 'src/locales',
 
   /**
    * Custom name for the locale file, without the .json extension.
@@ -118,7 +92,7 @@ export default {
    * @example null         → locales/en.json
    * @example 'translation' → locales/en/translation.json
    */
-  localeFileName: null,
+  localeFileName: 'translation',
 
   // ── Key generation ─────────────────────────────────────────────────────────
 
@@ -192,6 +166,35 @@ export default {
    */
   exclude: [],
 
+  // ── Target languages ─────────────────────────────────────────────────────
+
+  /**
+   * Languages to generate translation files for, in addition to defaultLanguage.
+   *
+   * Run \`rai locales generate\` after \`rai scan\` to create these files.
+   * Each file starts as a copy of the default language file, ready to
+   * hand off for manual translation (or to paste into an LLM/translator).
+   *
+   * Must be valid ISO 639-1 codes.
+   *
+   * @default []
+   * @example ['fr', 'es', 'de']
+   */
+  targetLanguages: [],
+
+  // ── i18n entry file ──────────────────────────────────────────────────────
+
+  /**
+   * Path to your i18n setup file (the one with \`i18n.use(initReactI18next).init(...)\`).
+   *
+   * \`rai locales generate --with-imports\` edits this file to import and
+   * register newly generated locale files. If the file doesn't exist yet,
+   * import wiring is skipped with a warning.
+   *
+   * @default 'src/i18n.ts'
+   */
+  i18nFilePath: 'src/i18n.ts',
+
 } satisfies Partial<RaiConfig>
 `;
 
@@ -206,7 +209,9 @@ export default {
      Key things to check:
        • "defaultLanguage" — make sure this matches your app's current language
        • "localesDir"      — where locale files will be written
-       • "localeFileName"      — custom name for the translation files
+       • "localeFileName"  — custom name for the translation files
+       • "targetLanguages" — add languages you want to support (e.g. ['fr', 'es', 'de'])
+       • "i18nFilePath"    — path to your i18n setup file (default: src/i18n.ts)
        • "detectAlerts"    — set to false if you don't use Alert.alert()
        • "detectThrows"    — set to false if your errors aren't user-facing
        • "customDetectCalls" — add any toast or error handler functions you use
@@ -217,5 +222,16 @@ export default {
 
      This will scan your entire app, extract all translatable strings,
      and generate your locale file at <localesDir>/<defaultLanguage>.json
+
+  3. To generate translation files for target languages:
+       rai locales generate
+
+     This creates copies of the default locale file for each language in targetLanguages.
+     Each file will have the same keys as your default locale, ready for translation.
+
+  4. To automatically wire imports into your i18n file:
+       rai locales generate --with-imports
+
+     This adds import statements and registers the locale files in your i18n setup.
   `);
 }

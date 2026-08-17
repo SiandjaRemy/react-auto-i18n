@@ -1,12 +1,14 @@
 import { program } from "commander";
-import { logger } from "./utils/logger";
+import packageJson from "../package.json";
+
+export const APP_VERSION = packageJson.version;
 
 program
   .name("rai")
   .description(
     "Automatic i18n scanner and code transformer for React Native apps",
   )
-  .version("0.1.0")
+  .version(APP_VERSION)
   /**
    * enablePositionalOptions prevents Commander from confusing
    * root-level flags (like --debug) with subcommand flags.
@@ -64,6 +66,28 @@ program
   .action(async (options) => {
     const { revert } = await import("./commands/revert");
     await revert(options);
+  });
+
+// ─── locales ──────────────────────────────────────────────────────────────────
+// locales generate
+program
+  .command("locales-generate")
+  .description("Generate locale files for target languages")
+  .option("-p, --path <path>", "Root path of the project", ".")
+  .option(
+    "--only <languages>",
+    "Comma-separated list of language codes to generate",
+  )
+  .option(
+    "--force",
+    "Overwrite existing locale files (discards manual translations)",
+  )
+  .option("--yes", "Skip confirmation prompt when using --force")
+  .option("--with-imports", "Automatically wire imports into i18n file")
+  .option("--dry-run", "Preview without writing files")
+  .action(async (options) => {
+    const { runLocalesGenerate } = await import("./commands/locales-generate");
+    await runLocalesGenerate(options);
   });
 
 program.parse(process.argv);
