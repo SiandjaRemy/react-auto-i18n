@@ -195,6 +195,14 @@ export default {
    */
   i18nFilePath: 'src/i18n.ts',
 
+  /**
+   * Add 'use client' directive to files modified by rai replace.
+   * Required for Next.js App Router. Leave false for React Native / Expo.
+   *
+   * @default false
+   */
+  addUseClientDirective: false,
+
 } satisfies Partial<RaiConfig>
 `;
 
