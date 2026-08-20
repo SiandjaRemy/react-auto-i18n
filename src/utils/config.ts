@@ -27,6 +27,7 @@ export const DEFAULT_CONFIG: RaiConfig = {
   localesDir: "locales",
   localeFileName: null,
   maxKeyLength: 60,
+  addUseClientDirective: false,
   detectAlerts: true,
   detectThrows: true,
   customDetectCalls: [],

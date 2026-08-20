@@ -4,7 +4,6 @@ import path from "path";
 import { resolveLocaleFilePath } from "../utils/locale-path";
 import { flattenKeys, setNestedKey } from "../utils/flatten-keys";
 import { wireLocaleImports } from "./wire-i18n-imports";
-import { RaiConfig, SUPPORTED_LANGUAGE_CODES } from "../types/config";
 import { logger } from "../utils/logger";
 import { confirm } from "../utils/prompt";
 import { validateLanguageCodes } from "../utils/validation";

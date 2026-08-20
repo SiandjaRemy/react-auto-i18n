@@ -7,6 +7,15 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+
+## [1.0.1] — 2026-08-18
+
+### Fixed
+
+- Added a config to enable the addition of `"use client"` at the top of client components for Next.js apps with app router
+
+---
+
 ## [1.0.0] — 2026-08-17
 
 ### New

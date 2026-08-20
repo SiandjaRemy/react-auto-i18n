@@ -40,19 +40,19 @@
 ## How it works
 
 ```
-rai init                Create the config file
+npx rai init                Create the config file
      ↓
-rai scan                Scan the app → generate locales/en.json (or your locale file)
+npx rai scan                Scan the app → generate locales/en.json (or your locale file)
      ↓
 You: set up react-i18next, commit
      ↓
-rai replace             Rewrite source files with t() calls
+npx rai replace             Rewrite source files with t() calls
      ↓
 You: verify the app works
      ↓
-rai revert --clean      Delete backups → commit
+npx rai revert --clean      Delete backups → commit
      ↓
-rai locales-generate    Generate locale files for other languages
+npx rai locales-generate    Generate locale files for other languages
 ```
 
 ---
@@ -85,7 +85,7 @@ npm install -g react-auto-i18n
 Run this from your project root:
 
 ```bash
-rai init
+npx rai init
 ```
 
 This creates `rai.config.ts` with typed defaults. Open it and check at minimum:
@@ -99,7 +99,7 @@ A description of each config can be seen at its top (For v2, an update will be d
 ### 2. Scan your app
 
 ```bash
-rai scan
+npx rai scan
 ```
 
 This scans every `.ts`, `.tsx`, `.js`, and `.jsx` file in your project, extracts all translatable strings, and writes a locale JSON file. A preview of everything found is shown before any files are written. You will be asked to confirm before writing.
@@ -111,7 +111,7 @@ After scanning, follow the printed instructions to set up a basic `react-i18next
 Make sure you have committed your current state first because the next step modifies source files.
 
 ```bash
-rai replace
+npx rai replace
 ```
 
 This rewrites your source files to use `t()` calls. For each modified file it:
@@ -129,10 +129,10 @@ Run your app and verify everything works. Then:
 
 ```bash
 # If something looks wrong — restore original files
-rai revert
+npx rai revert
 
 # If everything looks good — clean up backups and commit
-rai revert --clean
+npx rai revert --clean
 git add .
 git commit -m "feat: replace strings with i18n t() calls"
 ```
@@ -140,7 +140,7 @@ git commit -m "feat: replace strings with i18n t() calls"
 ### 5. Generate locale files for other languages
 
 ```bash
-rai locales-generate --only fr,es,ar
+npx rai locales-generate --only fr,es,ar
 ```
 
 This creates locale files for the specified languages, pre-populated with your default language values ready for translation.
@@ -150,27 +150,27 @@ Manual translation is needed for the files content after this point.
 
 ## Commands
 
-### `rai init`
+### `npx rai init`
 
 Generates `rai.config.ts` in your project root with typed defaults.
 
 ```bash
-rai init
-rai init --path ./my-app   # specify a different project root
+npx rai init
+npx rai init --path ./my-app   # specify a different project root
 ```
 
 Safe to run — exits with a warning if a config already exists.
 
 ---
 
-### `rai scan`
+### `npx rai scan`
 
 Scans source files and generates the locale JSON file for your default language.
 
 ```bash
-rai scan
-rai scan --dry-run         # preview what would be found without writing
-rai scan --path ./my-app
+npx rai scan
+npx rai scan --dry-run         # preview what would be found without writing
+npx rai scan --path ./my-app
 ```
 
 **What gets detected:**
@@ -197,14 +197,14 @@ rai scan --path ./my-app
 
 ---
 
-### `rai replace`
+### `npx rai replace`
 
 Rewrites source files to use `t()` calls based on the generated locale file.
 
 ```bash
-rai replace
-rai replace --dry-run      # preview affected files without writing
-rai replace --path ./my-app
+npx rai replace
+npx rai replace --dry-run      # preview affected files without writing
+npx rai replace --path ./my-app
 ```
 
 **Replacement examples:**
@@ -265,31 +265,36 @@ function getStatusLabel(status: string, t: TFunction) {
 <Text>{getStatusLabel(status, t)}</Text>;
 ```
 
+**Next.js App Router: `createContext only works in Client Components` error**
+Components using `useTranslation()` must be Client Components in Next.js App Router.
+Add `'use client'` as the first line of each file modified by `npx rai replace`,
+or set `addUseClientDirective: true` in `rai.config.ts` to have the tool add it automatically.
+
 ---
 
-### `rai revert`
+### `npx rai revert`
 
-Restores source files to their state before `rai replace` was run, using the `.i18nbak` backup files created during replacement.
+Restores source files to their state before `npx rai replace` was run, using the `.i18nbak` backup files created during replacement.
 
 ```bash
-rai revert                 # restore files from backups
-rai revert --clean         # delete backups without restoring (after verifying)
-rai revert --path ./my-app
+npx rai revert                 # restore files from backups
+npx rai revert --clean         # delete backups without restoring (after verifying)
+npx rai revert --path ./my-app
 ```
 
 ---
 
-### `rai locales-generate`
+### `npx rai locales-generate`
 
 Generates locale files for one or more target languages based on your default locale file.
 
 ```bash
-rai locales-generate                            # generates locales for languages set in targetLanguages in the config file
-rai locales-generate --only fr
-rai locales-generate --only fr,es,ar
-rai locales-generate --only fr --force          # overwrite existing files
-rai locales-generate --only fr --with-imports   # also wire imports into i18n file
-rai locales-generate --only fr --dry-run        # preview without writing
+npx rai locales-generate                            # generates locales for languages set in targetLanguages in the config file
+npx rai locales-generate --only fr
+npx rai locales-generate --only fr,es,ar
+npx rai locales-generate --only fr --force          # overwrite existing files
+npx rai locales-generate --only fr --with-imports   # also wire imports into i18n file
+npx rai locales-generate --only fr --dry-run        # preview without writing
 ```
 
 Each generated file is a copy of your default locale with the same keys, ready to hand off for translation. If a file already exists, only missing keys are added — existing translations are preserved.
@@ -308,7 +313,7 @@ Each generated file is a copy of your default locale with the same keys, ready t
 
 ## Configuration
 
-`rai init` generates a fully typed config file. All fields are optional — missing fields fall back to their defaults.
+`npx rai init` generates a fully typed config file. All fields are optional — missing fields fall back to their defaults.
 
 ```ts
 // rai.config.ts
@@ -341,7 +346,7 @@ export default {
 | `detectThrows`      | `true`          | Extract strings from `throw new Error()` statements                                |
 | `customDetectCalls` | `[]`            | Additional function patterns to extract strings from                               |
 | `exclude`           | `[]`            | Glob patterns to exclude from scanning                                             |
-| `targetLanguages`   | `[]`            | Languages to generate with `rai locales-generate`                                  |
+| `targetLanguages`   | `[]`            | Languages to generate with `npx rai locales-generate`                                  |
 | `i18nFilePath`      | `'src/i18n.ts'` | Path to your i18n setup file (used by `--with-imports`)                            |
 
 ### Language codes
@@ -383,7 +388,7 @@ Same key format, different file structure. Matches the convention used by many i
 
 ## Setting up react-i18next
 
-After running `rai scan`, the tool prints setup instructions tailored to your config. Here is the general pattern:
+After running `npx rai scan`, the tool prints setup instructions tailored to your config. Here is the general pattern:
 
 ### Install dependencies
 
@@ -436,7 +441,7 @@ import "./src/i18n";
 Once your app is working with the default language, generate locale files for other languages:
 
 ```bash
-rai locales-generate --only fr,es
+npx rai locales-generate --only fr,es
 ```
 
 Then translate the values in each generated file. The files contain your default language's text as placeholder values, ready to be replaced with translations.
@@ -501,8 +506,8 @@ const key = condition ? keyA : keyB  // variable key
 <Text>{messages[index]}</Text>       // array access
 ```
 
-**`rai replace` is not idempotent.**
-Running `rai replace` twice on an already-replaced file will produce incorrect output. Always use `rai revert` before re-running.
+**`npx rai replace` is not idempotent.**
+Running `npx rai replace` twice on an already-replaced file will produce incorrect output. Always use `npx rai revert` before re-running.
 
 ---
 
@@ -515,10 +520,10 @@ Your `src/i18n.ts` file is not being imported before components render. Make sur
 The hook was not injected into a component. This happens when the component uses a naming pattern the tool does not recognize. Add `const { t } = useTranslation()` manually to the component.
 
 **Strings not being detected**
-Run `rai scan --debug` to see every file considered and which strings are found. Check that the file is not excluded by your `.gitignore` or `config.exclude`.
+Run `npx rai scan --debug` to see every file considered and which strings are found. Check that the file is not excluded by your `.gitignore` or `config.exclude`.
 
 **Import path error in `i18n.ts`**
-The `rai scan` output prints the exact import path to use for your configuration. Use that path rather than guessing.
+The `npx rai scan` output prints the exact import path to use for your configuration. Use that path rather than guessing.
 
 **App still shows keys after replace**
 The i18next `resources` object in `src/i18n.ts` is not including the locale file. Make sure the locale file is imported and listed under the correct language code.
@@ -527,7 +532,7 @@ The i18next `resources` object in `src/i18n.ts` is not including the locale file
 
 ## Future updates
 
-- **Translation API integration:** `rai translate fr,es,ar` to generate translated locale files via Google Translate or DeepL
+- **Translation API integration:** `npx rai translate fr,es,ar` to generate translated locale files via Google Translate or DeepL
 - **Sync command:** detect new or changed strings and update all locale files without re-running the full pipeline
 - **Mirror locale structure:** one JSON file per screen/component mirroring the app's folder structure
 - **Common namespace:** deduplicate strings used across multiple files into a shared `common.json`

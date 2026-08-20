@@ -6,6 +6,8 @@ import { logger } from "../utils/logger";
 import type { ExtractedString } from "./scanner";
 import type { LocaleFile } from "./scaffolder";
 import { normalizeJSXWhitespace } from "../utils/normalize";
+import { requireConfig } from "../utils/config";
+import { RaiConfig } from "../types/config";
 
 export interface TransformResult {
   filePath: string;
@@ -49,6 +51,33 @@ function isNestedInsideComponent(nodePath: any): boolean {
   return false;
 }
 
+/**
+ * Checks whether the file already has a 'use client' directive.
+ * In Next.js App Router, any file using hooks must be a Client Component.
+ */
+function hasUseClientDirective(programBody: any[]): boolean {
+  const firstStatement = programBody[0];
+  return (
+    firstStatement?.type === "ExpressionStatement" &&
+    firstStatement?.expression?.type === "StringLiteral" &&
+    firstStatement?.expression?.value === "use client"
+  );
+}
+
+/**
+ * Adds 'use client' as the very first statement in the file.
+ * Must come before any imports — Next.js requires it to be
+ * the first expression in the file.
+ */
+function addUseClientDirective(programBody: any[]): void {
+  if (hasUseClientDirective(programBody)) return;
+
+  programBody.unshift({
+    type: "ExpressionStatement",
+    expression: b.literal("use client"),
+    directive: "use client",
+  });
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // AST node builders
 // ─────────────────────────────────────────────────────────────────────────────
@@ -441,6 +470,7 @@ export function transformFile(
   appRoot: string,
   strings: ExtractedString[],
   localeData: LocaleFile,
+  config: RaiConfig,
 ): TransformResult {
   const code = readFileSafe(filePath);
   if (!code) return { filePath, modified: false, replacements: 0 };
@@ -909,6 +939,10 @@ export function transformFile(
       "useTranslation",
       buildUseTranslationImport,
     );
+
+    if (config.addUseClientDirective) {
+      addUseClientDirective(ast.program.body);
+    }
   }
 
   /**
@@ -976,13 +1010,15 @@ export async function transformProject(
   strings: ExtractedString[],
   localeData: LocaleFile,
 ): Promise<TransformResult[]> {
+  const config = await requireConfig(appRoot);
+
   const uniqueFiles = [...new Set(strings.map((s) => s.filePath))];
   logger.dim(`  Processing ${uniqueFiles.length} file(s)...`);
 
   const results: TransformResult[] = [];
 
   for (const filePath of uniqueFiles) {
-    const result = transformFile(filePath, appRoot, strings, localeData);
+    const result = transformFile(filePath, appRoot, strings, localeData, config);
     results.push(result);
 
     if (result.modified) {
