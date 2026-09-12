@@ -52,14 +52,28 @@ export function getConfigPath(appRoot: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Loads and parses the user's rai.config.ts file.
+ * Loads and parses the user's rai.config.ts file using jiti.
  *
- * Uses jiti to execute the TypeScript config file directly at runtime
- * without requiring a separate compile step. This is the same approach
- * used by Tailwind CSS, Nuxt, and Vite for their config files.
+ * jiti executes TypeScript config files directly at runtime without
+ * a separate compile step — the same approach used by Tailwind, Nuxt,
+ * and Vite for their config files.
  *
- * After loading, the user's values are merged on top of DEFAULT_CONFIG
- * so any missing fields are filled in automatically.
+ * Supports two config styles:
+ *
+ * Style A — defineConfig (recommended):
+ *   import { defineConfig } from 'react-auto-i18n'
+ *   export default defineConfig({ defaultLanguage: 'en' })
+ *
+ * Style B — plain object with satisfies (legacy, still supported):
+ *   import type { RaiConfig } from 'react-auto-i18n'
+ *   export default { defaultLanguage: 'en' } satisfies Partial<RaiConfig>
+ *
+ * Both produce the same runtime shape: { default: Partial<RaiConfig> }.
+ * defineConfig() returns its argument unchanged, so mod.default is
+ * always a plain Partial<RaiConfig> object in both cases.
+ *
+ * After loading, user values are merged on top of DEFAULT_CONFIG so
+ * any omitted field is automatically filled in with its default.
  *
  * Returns null if the config file does not exist.
  *
@@ -73,11 +87,6 @@ export async function loadConfig(appRoot: string): Promise<RaiConfig | null> {
   }
 
   try {
-    /**
-     * jiti creates a require-like function that understands TypeScript.
-     * We pass the config file path as the base so any relative imports
-     * inside the config resolve from the correct location.
-     */
     const { createJiti } = await import("jiti");
     const jiti = createJiti(configPath);
     const mod = (await jiti.import(configPath)) as {
@@ -85,12 +94,21 @@ export async function loadConfig(appRoot: string): Promise<RaiConfig | null> {
     };
 
     /**
-     * Handle both CommonJS (module.exports =) and ESM (export default) shapes.
-     * jiti normalises most cases but we guard both to be safe.
+     * Handle both ESM (export default) and CJS (module.exports =) shapes.
+     * jiti normalises most cases but we guard both for safety.
+     *
+     * With defineConfig:
+     *   mod.default = defineConfig({ ... }) = { ... }  (plain object)
+     *
+     * With satisfies:
+     *   mod.default = { ... } satisfies Partial<RaiConfig> = { ... }
+     *
+     * Both resolve to the same plain object — no special handling needed.
      */
     const userConfig = mod.default ?? (mod as unknown as Partial<RaiConfig>);
 
-    // Merge: defaults first, then user values override them
+    // Merge user values on top of defaults
+    // Any field the user omits is filled in from DEFAULT_CONFIG
     return { ...DEFAULT_CONFIG, ...userConfig };
   } catch (err) {
     logger.error(`Failed to load ${CONFIG_FILENAME}:`);

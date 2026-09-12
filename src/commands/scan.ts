@@ -5,13 +5,7 @@ import { logger } from "../utils/logger";
 import { requireConfig, validateLocalesDir } from "../utils/config";
 import { scanProject, type ExtractedString } from "../core/scanner";
 import { generateLocaleFile } from "../core/scaffolder";
-import {
-  confirm,
-  detectPackageManager,
-  isExpoProject,
-  isPackageInstalled,
-  buildInstallCommand,
-} from "../utils/prompt";
+import { confirm } from "../utils/prompt";
 import fs from "fs";
 
 interface ScanOptions {
@@ -139,12 +133,21 @@ export async function scan(options: ScanOptions): Promise<void> {
     `Generated ${path.relative(appRoot, filePath)} with ${keyCount} keys`,
   );
 
+  // ── Step 6b: Update i18n.ts ───────────────────────────────────────────────
+  /**
+   * Add the default locale import to i18n.ts now that the locale file exists.
+   * If i18n.ts doesn't exist yet (user skipped init), it is generated fresh.
+   */
+  const { addLocaleToI18nFile } = await import("../utils/i18n-file");
+  addLocaleToI18nFile(appRoot, config, config.defaultLanguage);
+
   // ── Step 7: Next steps ────────────────────────────────────────────────────
   printNextSteps(
     appRoot,
     config.localesDir,
     config.defaultLanguage,
     config.localeFileName,
+    config.i18nFilePath ?? "src/i18n.ts",
   );
 }
 
@@ -237,47 +240,17 @@ function printNextSteps(
   localesDir: string,
   defaultLang: string,
   localeFileName: string | null,
+  i18nFilePath: string,
 ): void {
   logger.section("Next steps");
 
-  // ── Resolve locale output path for display ────────────────────────────────
   const localeOutputPath = localeFileName
     ? `${localesDir}/${defaultLang}/${localeFileName}.json`
     : `${localesDir}/${defaultLang}.json`;
 
-  // ── Resolve correct locale import path for i18n.ts ────────────────────────
   /**
-   * i18n.ts lives at src/i18n.ts (relative to appRoot).
-   * The locale file path relative to i18n.ts depends on localesDir.
-   *
-   * If localesDir is 'src/locales':
-   *   i18n.ts is at src/i18n.ts
-   *   locale is at src/locales/en/translation.json
-   *   → relative path from src/ to src/locales/ is ./locales/...
-   *
-   * If localesDir is 'locales':
-   *   i18n.ts is at src/i18n.ts
-   *   locale is at locales/en.json
-   *   → relative path from src/ to locales/ is ../locales/...
-   */
-  const i18nFileDir = path.join(appRoot, "src");
-  const localeAbsPath = localeFileName
-    ? path.join(appRoot, localesDir, defaultLang, `${localeFileName}.json`)
-    : path.join(appRoot, localesDir, `${defaultLang}.json`);
-
-  const localeImportPath = path
-    .relative(i18nFileDir, localeAbsPath)
-    .replace(/\\/g, "/")
-    .replace(/^([^.])/, "./$1"); // ensure it starts with ./
-
-  // ── Detect entry point and compute import path ────────────────────────────
-  /**
-   * We check common entry point locations in priority order.
-   * For each candidate, we compute the relative path from that file's
-   * directory to src/i18n.ts.
-   *
-   * This produces the correct import regardless of where the entry
-   * point lives relative to the project root.
+   * Detect the entry point to show the correct import path.
+   * i18n.ts has already been generated/updated at this point.
    */
   const entryPointCandidates = [
     "app/_layout.tsx",
@@ -291,83 +264,36 @@ function printNextSteps(
   ];
 
   let entryPointFile = "your app entry point";
-  let i18nImportPath = "./src/i18n"; // safe fallback
+  let i18nImportPath = `./${i18nFilePath.replace(/\.ts$/, "")}`;
 
-  const i18nAbsPath = path.join(appRoot, "src", "i18n.ts");
+  const i18nAbsPath = path.join(appRoot, i18nFilePath);
 
   for (const candidate of entryPointCandidates) {
     const candidateAbsPath = path.join(appRoot, candidate);
-
     if (fs.existsSync(candidateAbsPath)) {
       entryPointFile = candidate;
-
-      /**
-       * Compute the relative path from the entry point's directory
-       * to the i18n file.
-       *
-       * Example:
-       *   entry:   app/_layout.tsx   → dir: app/
-       *   i18n:    src/i18n.ts
-       *   relative from app/ to src/i18n.ts → ../src/i18n
-       */
       const entryDir = path.dirname(candidateAbsPath);
-      const rel = path
+      i18nImportPath = path
         .relative(entryDir, i18nAbsPath)
-        .replace(/\\/g, "/") // normalize Windows backslashes
-        .replace(/\.ts$/, "") // strip .ts extension
-        .replace(/^([^.])/, "./$1"); // ensure starts with ./ or ../
-
-      i18nImportPath = rel;
+        .replace(/\\/g, "/")
+        .replace(/\.ts$/, "")
+        .replace(/^([^.])/, "./$1");
       break;
     }
   }
 
-  // ── Dependency check ──────────────────────────────────────────────────────
-  const missing = ["i18next", "react-i18next"].filter(
-    (pkg) => !isPackageInstalled(pkg, appRoot),
-  );
-
-  const pm = detectPackageManager(appRoot);
-  const isExpo = isExpoProject(appRoot);
-  let stepNum = 1;
-
-  if (missing.length > 0) {
-    const installCmd = buildInstallCommand(missing, pm, isExpo);
-    logger.info(`
-  ${stepNum++}. Install required dependencies:
-       ${chalk.cyan(installCmd)}`);
-  }
-
-  // ── Print guide ───────────────────────────────────────────────────────────
   logger.info(`
-  ${stepNum++}. Create src/i18n.ts in your project:
+  Your locale file has been generated and ${i18nFilePath} has been updated.
 
-${chalk.cyan(`     import i18n from 'i18next'
-     import { initReactI18next } from 'react-i18next'
-     import ${defaultLang} from '${localeImportPath}'
-
-     i18n.use(initReactI18next).init({
-       resources: {
-         ${defaultLang}: { translation: ${defaultLang} },
-       },
-       lng: '${defaultLang}',
-       fallbackLng: '${defaultLang}',
-       interpolation: {
-         escapeValue: false,
-       },
-     })
-
-     export default i18n`)}
-
-  ${stepNum++}. Import it in your app entry point (${entryPointFile}):
+  1. Make sure ${i18nFilePath} is imported in your entry point (${entryPointFile}):
        ${chalk.cyan(`import '${i18nImportPath}'`)}
+       ${chalk.gray("This must be the first import in the file.")}
 
-  ${stepNum++}. Review ${localeOutputPath}, then commit:
-       ${chalk.cyan(`git add .\ngit commit -m "chore: add i18n locale file"`)}
+  2. Review ${localeOutputPath}, then commit:
+       ${chalk.cyan(`git add .`)}
+       ${chalk.cyan(`git commit -m "chore: add i18n locale file"`)}
 
-  ${stepNum++}. Then run:
-       ${chalk.cyan(`rai replace`)}
-
-       This will rewrite your source files to use t() calls automatically.
+  3. Then run:
+       ${chalk.cyan("rai replace")}
   `);
 }

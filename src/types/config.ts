@@ -339,5 +339,5 @@ export interface RaiConfig {
    *
    * @default 'src/i18n.ts'
    */
-  i18nFilePath: "src/i18n.ts";
+  i18nFilePath: string | null;
 }

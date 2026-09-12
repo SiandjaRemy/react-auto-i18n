@@ -9,6 +9,6 @@
  * It tells TypeScript what types are available when someone writes:
  *   import type { RaiConfig } from 'react-auto-i18n'
  */
-
-export type { RaiConfig, LanguageCode } from './types/config'
+export { defineConfig } from "./utils/defineConfig";
+export type { RaiConfig, LanguageCode } from "./types/config";
 export { SUPPORTED_LANGUAGE_CODES, SUPPORTED_LOCALES } from "./types/config";
